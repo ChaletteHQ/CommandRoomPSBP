@@ -1,0 +1,6 @@
+{
+  "client": "PSBP",
+  "repo": "CommandRoomPSBP",
+  "note": "Core skills listed here are SKIPPED when core is mirrored in, because this client has a custom replacement in command-room-psbp-custom/. Empty = client tracks core for every skill.",
+  "core_skill_overrides": []
+}
