@@ -52,10 +52,10 @@ Load:
 - The `workspace.brain_name` field from entities.json — for chat copy ("Penelope read your last 7 days…"; default "Penelope" if unset)
 - The customer's last-event timestamp in events.jsonl — defines the END of the 7-day window (now), so the window is `[now - 7d, now]` in workspace timezone
 
-Append a `m1_backfill_started` event to events.jsonl:
+Append a `m1_backfill_started` event to events.jsonl (OMIT `seq`/`ts` — the append gate auto-stamps both inside the writer lock, `ts` in UTC; a hand-typed "now" was the F-15 naive-local-clock bug class, v4.5.2 R4.)
 
 ```jsonl
-{"type":"m1_backfill_started","ts":"<ISO>","data":{"window_start":"<ISO>","window_end":"<ISO>"},"source_skill":"cr-m1-backfill"}
+{"type":"m1_backfill_started","data":{"window_start":"<ISO>","window_end":"<ISO>"},"source_skill":"m1-backfill"}
 ```
 
 ---
@@ -163,7 +163,7 @@ Compute for the recap (skip any that can't be computed — never fabricate):
 
 Atomic-append all events from Phase 2 to `_hq/data/events.jsonl` per `shared/WORKSPACE_API.md`. Batch all appends — don't fire one at a time.
 
-Each event carries `source_skill: "cr-m1-backfill"` and original-source timestamp (not `fireAt`).
+Each event carries `source_skill: "m1-backfill"` (bare since v2.14.27; the registered taskId stays `cr-m1-backfill`, and any pre-rename history at `source_skill: "cr-m1-backfill"` remains valid append-only) and original-source timestamp (not `fireAt`).
 
 After append, regenerate views (`MASTER_TRACKER.md`, `DECISION_LOG.md`, `PEOPLE.md`) per `references/VIEW_GENERATION.md`.
 
@@ -228,10 +228,10 @@ That's the raw recap. <BrainName> is now using all of this in your home chat —
 
 After successful chat post, call `mcp__scheduled-tasks__update_scheduled_task(taskId="cr-m1-backfill", enabled=false)`. This is a one-shot — re-firing wastes tokens and re-extracts the same week.
 
-Append final event:
+Append final event (same seq/ts omission rule):
 
 ```jsonl
-{"type":"m1_backfill_complete","ts":"<ISO>","data":{"events_written":<N>,"input_tokens_used":<N>,"sampled":<bool>},"source_skill":"cr-m1-backfill"}
+{"type":"m1_backfill_complete","data":{"events_written":<N>,"input_tokens_used":<N>,"sampled":<bool>},"source_skill":"m1-backfill"}
 ```
 
 ---

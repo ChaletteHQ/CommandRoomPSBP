@@ -1,5 +1,7 @@
 # Orchestrator prompt — Workspace Map refresh
 
+> LATE-FIRE EXEMPT (on-demand artifact refresh): this is not a recurring reader-facing chat, so the shared lateness tiers do not apply — run in full whenever fired. Documented v4.5.1-era hygiene so the omission reads as a contract, not a gap.
+
 This file is the EXACT prompt registered with `create_scheduled_task` for `taskId: cr-refresh-workspace-map`. Default cron: `0 16 * * 1-5` (4 PM weekdays local). Per-workspace override via `workspace.schedule_config` in entities.json.
 
 **Purpose (v2.14.11+):** silently rebuild the Workspace Map sidebar artifact with current data so the user wakes up to a fresh map. Solves the v2.7.x stale-artifact problem without making the artifact live.
@@ -70,10 +72,10 @@ If verification fails, log `artifact_install_failed` with reason and STOP. Do NO
 
 # Phase 6 — Memory updates (silent per Rule 9)
 
-Append a single `pack_run` event to events.jsonl:
+Append a single `pack_run` event to events.jsonl (OMIT `seq`/`ts` — the append gate auto-stamps both inside the writer lock, `ts` in UTC; a hand-typed "now" was the F-15 naive-local-clock bug class, v4.5.2 R4.)
 
 ```jsonl
-{"type":"pack_run","ts":"<ISO>","data":{"kind":"refresh_workspace_map","status":"complete","duration_ms":<N>,"telemetry":{...}}}
+{"type":"pack_run","data":{"kind":"refresh_workspace_map","status":"complete","duration_ms":<N>,"telemetry":{...}}}
 ```
 
 Use `shared/scripts/telemetry.py` `build_pack_run_telemetry()` for the telemetry block — same pattern as the other 5 orchestrators. Silent — never narrate to chat.

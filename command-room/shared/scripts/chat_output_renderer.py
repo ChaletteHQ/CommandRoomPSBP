@@ -80,6 +80,17 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+# v4.5.2 S2 (F-59) — the verb taxonomy is the single source of truth for
+# action ids, display labels, required-input flags, and mute durations.
+# This module derives its registry + label maps from the table instead of
+# owning literals that drift.
+from verb_taxonomy import (
+    CANONICAL_ACTION_IDS as _TAXONOMY_ACTION_IDS,
+    DISPLAY_LABELS as _TAXONOMY_DISPLAY_LABELS,
+    REQUIRED_INPUT_ACTION_IDS,
+    required_input_thing,
+)
+
 
 # Visual constants
 PILL = "▸"
@@ -383,6 +394,7 @@ __all__ = [
     "render_chat_output",
     "render_chat_output_widget",
     "scan_for_id_leaks",
+    "scan_for_generic_summary",
     "validate_chat_output",
     "validate_rendered_widget",
     "CANONICAL_ACTIONS",
@@ -392,6 +404,8 @@ __all__ = [
     "DataShapeError",
     "PulseRichnessError",
     "WrapperContractError",
+    "WidgetFeedbackContractError",
+    "REQUIRED_INPUT_ACTION_IDS",
     "EMAIL_REQUIRED_ACTIONS",
     "PULSE_PERSON_DORMANT_ACTIONS",
     "PULSE_REQUIRED_METADATA_KEYS",
@@ -399,122 +413,19 @@ __all__ = [
 
 
 # ============================================================================
-# Canonical action set (v2.13.0+ — single source of truth)
+# Canonical action set (v2.13.0+; v4.5.2 S2 — derived from the verb taxonomy)
 #
 # Per shared/CONTRACT.md Rule 5: every action label MUST be in this set.
 # render_chat_output_widget raises CanonicalActionError if an orchestrator
 # passes an unknown action verb. No silent acceptance.
 #
-# Adding a new action: add to this set + add to shared/CHAT_ACTION_WIDGET.md
-# "Action reference — what each button does" + add to shared/CONTRACT.md if
-# the rule changes.
+# The set is DERIVED from shared/scripts/verb_taxonomy.py — one row per verb
+# (wire id, display label, event, surfaces, mute TTL). Adding a new action:
+# add a ROW there (+ shared/CHAT_ACTION_WIDGET.md's human-readable tables +
+# an apply-choices handler). Never re-introduce a literal set here.
 # ============================================================================
 
-CANONICAL_ACTIONS = frozenset({
-    # Email-shaped (Inbox, Commitments YOU OWE / OWED TO YOU)
-    # v2.14.4+ — `to drafts` and `edit then draft` consolidated into single
-    # `draft` (always opens multi-field edit, then saves to Drafts). The
-    # save-as-is-without-editing path is rare; if you're not sending, you're
-    # almost always going to want to review/edit before saving.
-    "send",
-    "edit then send",
-    "draft",
-    "add email then send",  # v3.13.8+ — Bug #44 recovery verb for items with no actionable email address. Opens a single-field email input; on submit, updates the To: field on the item + transitions to enabled `send`. Writes a `contact_email_captured` event with `data.person_id` when the recipient resolves to a known record.
-    "escalate to memo",
-    "skip",
-
-    # Inbox calendar_invite
-    "accept",
-    "propose [time]",
-    "decline",
-    "decline [reason]",
-
-    # Commitments YOU OWE
-    "prep deep work",
-    "push to [date]",
-    "resolved",
-
-    # Commitments OWED TO YOU
-    "follow-up call",
-    "mark received",
-    "mark received all",
-
-    # Commitments self
-    "mark done",
-
-    # Pulse person
-    "investigate",
-    "draft re-engagement",
-    "schedule catchup [when]",
-    "resolved",  # v2.14.1+ — unified with Commitments YOU OWE; no surprise textarea per Drew's Apr 30 feedback
-    "snooze [duration]",  # DEPRECATED v2.14.38+ — kept as back-compat alias for in-flight pre-v2.14.38 widgets. New widgets emit `snooze 3d` instead. Apply-choices accepts both.
-    "snooze 3d",  # v2.14.38+ — fixed-duration snooze (no textarea). Per M's 2026-05-07 ask: "3 days fixed". Display label: "Snooze (3 days)". Replaces `snooze [duration]` across all surfaces; the textarea-driven version retained as deprecated alias only.
-    "not relevant",  # v2.14.38+ — 60-day cooldown dismissal. Display label: "Not relevant" (duration NEVER shown to user — internal mechanic). Used in REVIEW items (people-record / entity-proposal / CRU) as the "no, don't add" answer; in inbox / past-meetings sub-items as a stronger-than-skip dismissal that won't re-surface that specific item for 60 days.
-    "add [text]",  # v2.14.38+ — REVIEW-item affirmative with permissive textarea. Empty input = accept inferred values; non-empty = orchestrator folds the user's text into the entity record. Replaces the prior `confirm` / `edit [change]` / `confirm [type]` / `edit [type]` ambiguity across REVIEW surfaces. Per M's 2026-05-07 simplification ask.
-
-    # Pulse intro-followup check (v3.13.2+ — domain-specific intro-landed semantics)
-    # The intro-broker pattern: after an intro is made, Pulse re-surfaces it ~30 days later
-    # to check whether the two parties connected. `landed` → relationship-graph signal +
-    # voice-sample fodder for future intros; `didnt land` → pattern data for "this
-    # counterparty type doesn't respond to this framing"; `snooze 14d` → reschedule
-    # the check 14 days out. Display labels: "Landed" / "Didn't land" / "Snooze (14 days)".
-    "landed",
-    "didnt land",
-    "snooze 14d",
-
-    # Pulse stale project
-    "mark paused",
-    "status check",
-
-    # Pulse pending review (v2.14.5+ finish-cluster: snooze + skip)
-    "confirm",
-    "edit [change]",
-
-    # Pulse dormant transition (v2.14.5+ finish-cluster: snooze + skip)
-    "active",
-    "keep paused",
-    "archive",
-
-    # Pulse entity proposal (v2.14.5+ finish-cluster: snooze + skip;
-    # `edit [type]` opens a textarea so the user can override the inferred
-    # relationship_type / scope / domains before confirming)
-    "confirm [type]",
-    "edit [type]",
-
-    # Past Meetings new-person sub-item (v2.12.6+; v2.14.4+ rename log to discuss → add to list; v2.14.19+ rename add to list → add to my list to match the `show my list` retrieval trigger)
-    "add as person to [org]",
-    "add as new org",
-    "add context [text]",
-    "add to my list",
-
-    # Past Meetings vague-timing
-    "set date [when]",
-
-    # Past Meetings decision-needed
-    "decide [text]",
-
-    # Upcoming Meetings
-    "context [text]",       # v2.14.37+ — unified context affordance. Replaces
-                            # `add more context [text]` and `ask question [text]`
-                            # per M's evening 2026-05-07 ask: "we only need a
-                            # 'Context' button that opens up the chat box to
-                            # add context/questions/interact — Just one option."
-                            # Apply-choices routes intent-aware: question-shaped
-                            # input synthesizes an answer against prior meetings +
-                            # emails + decisions; statement-shaped input regenerates
-                            # the brief with the added context folded in.
-    "add more context [text]",  # back-compat alias (v2.12.4 - v2.14.36); auto-translated
-                                # to `context [text]` in apply-choices dispatch.
-    "ask question [text]",  # back-compat alias (v2.14.14 - v2.14.36); auto-translated
-                            # to `context [text]` in apply-choices dispatch.
-    "push meeting [date]",
-
-    # Bulk row (every surface)
-    "send all",
-    "to drafts all",
-    "show more",
-    "skip all",
-})
+CANONICAL_ACTIONS = _TAXONOMY_ACTION_IDS
 
 
 class CanonicalActionError(ValueError):
@@ -620,6 +531,24 @@ class PulseRichnessError(DataShapeError):
     The fix is always at the orchestrator level. Don't disable this validator
     or relax the rules — that's how the v2.14.x agent-improvises-around-canonical
     failure class keeps shipping.
+    """
+
+
+class WidgetFeedbackContractError(ValueError):
+    """Raised by `validate_rendered_widget()` when an action widget's HTML is
+    missing the visible-feedback layer (v4.5.2 S2 — F-58/F-17).
+
+    F-58: a hand-built widget variant shipped buttons whose clicks registered
+    with NO pressed-state — toggle semantics with invisible state, so the
+    customer couldn't tell what was armed before Apply (and a repeat click
+    silently deselected). The canonical renderer always emits the selected
+    state CSS, the live "N of M selected" counter, and (when any action
+    requires an input) the Apply-hold reason line — this validator makes
+    those non-optional for ANY html that reaches show_widget, renderer-built
+    or not.
+
+    The fix when this raises: render through `render_chat_output_widget()`
+    and ship its output byte-for-byte. Never hand-build an action widget.
     """
 
 
@@ -1270,6 +1199,48 @@ def scan_for_id_leaks(text):
 
 
 # ============================================================================
+# Generic-summary banned patterns (SPEC EXEC1 element 1 — the anti-washing
+# floor). These are washing shapes that defeat the 30-second contract: a header
+# line that says "Several important updates" instead of a named entity / number
+# / date. Per the EXEC1 spec these apply to EXEC-HEADER LINES ONLY (verdict /
+# CHANGED / DECIDE / NEEDED) — NOT to arbitrary body prose, which may legitimately
+# quote such phrases. So they are a SEPARATE, opt-in scan (run against header
+# lines), deliberately NOT folded into the blocking `_LEAK_PATTERNS` that scans
+# every chat post. Semantic verdict-quality (does the line carry a real
+# conclusion) lives in the per-skill checklists — this catches only the four
+# canonical washing shapes the spec enumerates, and nothing more.
+# ============================================================================
+
+_GENERIC_SUMMARY_PATTERNS = [
+    (_leak_re.compile(r"\bkey\s+developments?\b", _leak_re.IGNORECASE),
+     "generic-summary header (key developments)"),
+    (_leak_re.compile(r"\bseveral\s+(?:important\s+)?updates?\b", _leak_re.IGNORECASE),
+     "generic-summary header (several updates)"),
+    (_leak_re.compile(r"\bbusy\s+week\s+across\b", _leak_re.IGNORECASE),
+     "generic-summary header (busy week across)"),
+    (_leak_re.compile(r"\blots\s+of\s+movement\b", _leak_re.IGNORECASE),
+     "generic-summary header (lots of movement)"),
+]
+
+
+def scan_for_generic_summary(text):
+    """Return a list of (label, matched_substring) for every generic-summary
+    washing shape found. Run this against EXEC-HEADER LINES (verdict / CHANGED /
+    DECIDE / NEEDED) — not body prose. Empty list = clean.
+
+    SPEC EXEC1 element 1: an exec-header line must carry a named entity, number,
+    or date, OR use the explicit nothing-form. A line like "Several important
+    updates this week" is the washing shape this catches."""
+    if not text:
+        return []
+    findings = []
+    for pat, label in _GENERIC_SUMMARY_PATTERNS:
+        for m in pat.finditer(text):
+            findings.append((label, m.group(0)))
+    return findings
+
+
+# ============================================================================
 # Path-leak runtime guard (v3.6.0+) — runs against chat output / widget HTML to
 # catch absolute filesystem paths that do not fall under the user's
 # runtime-resolved workspace. Closes the v3.5.3 class of bug: literal absolute
@@ -1615,10 +1586,6 @@ def _render_all_clear_summary(data: dict, wrapper: str = "document") -> str:
 
 _ALL_CLEAR_CSS = """
 .cr-card-all-clear { padding: 16px 20px; }
-.cr-counter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 12px 0; }
-.cr-counter-card { background: #14110F; border: 1px solid #2A2520; border-radius: 6px; padding: 10px 12px; }
-.cr-counter-label { font-size: 11px; color: #8C7A65; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
-.cr-counter-value { font-size: 22px; color: #E8E0D6; font-weight: 500; }
 .cr-summary-callout { margin: 12px 0; padding: 10px 14px; background: #14110F; border-left: 3px solid #4A6B8C; border-radius: 0 6px 6px 0; color: #B5A998; font-size: 13px; line-height: 1.5; }
 .cr-tracked-items-header { margin-top: 16px; font-size: 11px; color: #8C7A65; text-transform: uppercase; letter-spacing: 0.06em; padding-bottom: 4px; border-bottom: 1px solid #2A2520; }
 .cr-tracked-items { display: flex; flex-direction: column; }
@@ -1714,6 +1681,10 @@ def _render_onboarding_setup(data: dict, wrapper: str = "document") -> str:
     parts.append("</div>")
 
     js = _WIDGET_JS_TEMPLATE.replace("__TOTAL_ITEMS__", str(total))
+    # W4 (Phase 3) — bake the emitting surface's id into the widget so every
+    # Apply-all tuple carries {src}. Orchestrator data views pass source_skill;
+    # legacy/absent -> empty string -> apply-choices uses the fire-marker fallback.
+    js = js.replace("__CR_SRC__", _json_mod.dumps(str(data.get("source_skill") or "")))
     parts.append(f"<script>{js}</script>")
     if wrapper == "document":
         parts.append("</body></html>")
@@ -1908,6 +1879,23 @@ def render_chat_output_widget(data: dict, *, wrapper: str = "document") -> str:
     # the `add email then send` recovery verb instead.
     _validate_send_class_email_addresses(data)
 
+    # Gate 1e (SPEC GATE1, v3.20.x): turn-level voice-tell backstop. Scans every
+    # email-shaped item's body for banned voice tells even when no composer ran
+    # its Step-2 gate — this is the deterministic backstop for the email/chat
+    # surface that never reaches brief_writer.make_brief. NON-BLOCKING by design
+    # (stderr-warn only; the renderer has no per-client allow_phrases context, so
+    # blocking here would punish a calibrated voice). Best-effort + never raises.
+    try:
+        from turn_backstop import scan_data_view_for_tells
+        # workspace_root self-resolves inside the backstop (SPEC GATE2 D4) so the
+        # emit branch actually fires from the renderer call-site — the GATE1 wiring
+        # gap that left the backstop scanning but writing nothing detectable.
+        scan_data_view_for_tells(data, source_skill=data.get("source_skill"))
+    except Exception:
+        # The backstop must never break a render. The hard voice gate still lives
+        # in make_brief for the .docx surface.
+        pass
+
     sections = data.get("sections", [])
     total = _count_total_selectable_items(sections)
 
@@ -1935,6 +1923,25 @@ def render_chat_output_widget(data: dict, *, wrapper: str = "document") -> str:
     if sub_header:
         parts.append(f'<div class="cr-sub-header">{_md_to_html(sub_header)}</div>')
 
+    # v4.5.2 S2 (F-18 convergence) — optional header stat tiles. The
+    # full-list triage layout M picked opens with headline-bucket tiles
+    # (Open / You owe / Owed to you / Unowned / Unconfirmed) rendered
+    # VERBATIM from the canonical loader's bucket export (R4). Same markup
+    # the all-clear summary already used.
+    counters = data.get("counters") or []
+    if counters:
+        parts.append('<div class="cr-counter-grid">')
+        for c in counters:
+            c_label = _html_mod.escape(str(c.get("label", "")))
+            c_value = _html_mod.escape(str(c.get("value", "")))
+            parts.append(
+                f'<div class="cr-counter-card">'
+                f'<div class="cr-counter-label">{c_label}</div>'
+                f'<div class="cr-counter-value">{c_value}</div>'
+                f'</div>'
+            )
+        parts.append('</div>')
+
     parts.append('<div class="cr-body">')
     for section in sections:
         parts.append(_render_widget_section(section))
@@ -1948,19 +1955,30 @@ def render_chat_output_widget(data: dict, *, wrapper: str = "document") -> str:
     if save_confirmation:
         parts.append(f'<div class="cr-sub-header">{_md_to_html(save_confirmation)}</div>')
 
+    # v4.5.2 S2 (F-58/F-17) — live "N of M selected" counter + a visible
+    # Apply-hold reason line. The reason line is the anti-silent-block
+    # surface: whenever Apply is disabled because a selected action is
+    # missing its required input, the reason renders HERE, next to the
+    # button the user is staring at.
     parts.append('<div class="cr-footer">')
     parts.append(
-        f'<div class="cr-counter">Selections so far: <strong id="cr-count">0</strong> of {total}</div>'
+        f'<div class="cr-counter"><strong id="cr-count">0</strong> of {total} selected</div>'
     )
     parts.append('<div class="cr-footer-actions">')
     parts.append('<button class="cr-btn-apply" id="cr-apply" type="button" disabled>Apply all</button>')
     parts.append('<button class="cr-btn-secondary" id="cr-clear" type="button">Reset</button>')
-    parts.append('<button class="cr-btn-secondary" id="cr-skip-all" type="button">Dismiss rest</button>')
-    parts.append("</div></div>")
+    parts.append('<button class="cr-btn-secondary" id="cr-skip-all" type="button">Snooze rest (1 day)</button>')
+    parts.append("</div>")
+    parts.append('<div class="cr-apply-reason" id="cr-apply-reason" style="display:none;"></div>')
+    parts.append("</div>")
 
     parts.append("</div>")
 
     js = _WIDGET_JS_TEMPLATE.replace("__TOTAL_ITEMS__", str(total))
+    # W4 (Phase 3) — bake the emitting surface's id into the widget so every
+    # Apply-all tuple carries {src}. Orchestrator data views pass source_skill;
+    # legacy/absent -> empty string -> apply-choices uses the fire-marker fallback.
+    js = js.replace("__CR_SRC__", _json_mod.dumps(str(data.get("source_skill") or "")))
     parts.append(f"<script>{js}</script>")
     if wrapper == "document":
         parts.append("</body></html>")
@@ -2090,6 +2108,50 @@ def validate_rendered_widget(html: str) -> None:
         n_value = _html_mod.unescape(n_match.group(1))
         action_value = _html_mod.unescape(action_match.group(1))
         wrappers_present.add((n_value, action_value))
+
+    # v4.5.2 S2 (F-58/F-17) — visible-feedback contract. Any HTML that carries
+    # action buttons must also carry: the pressed-state CSS (armed rows
+    # visibly distinct), the live selection counter, and — when any action
+    # requires an input — the inline reason element + the Apply-hold reason
+    # line. This is what makes a hand-built widget (the F-58 variant whose
+    # selection CSS was broken) fail loudly BEFORE show_widget instead of
+    # shipping invisible toggles.
+    has_action_buttons = bool(btn_re.search(html))
+    if has_action_buttons:
+        feedback_missing = []
+        # The pressed-state rule must live in actual CSS — the JS also names
+        # cr-selected (classList toggles), so scan only <style> blocks.
+        style_blocks = "".join(
+            _re_mod.findall(r"<style[^>]*>(.*?)</style>", html, flags=_re_mod.DOTALL)
+        )
+        if ".cr-selected" not in style_blocks:
+            feedback_missing.append(
+                "pressed-state CSS (.cr-selected rules inside a <style> block)"
+            )
+        if 'id="cr-count"' not in html:
+            feedback_missing.append('live selection counter (id="cr-count")')
+        if 'id="cr-apply"' not in html:
+            feedback_missing.append('Apply button (id="cr-apply")')
+        if 'data-input-required="1"' in html:
+            if 'id="cr-apply-reason"' not in html:
+                feedback_missing.append(
+                    'Apply-hold reason line (id="cr-apply-reason") — required '
+                    "because at least one action needs an input"
+                )
+            if "cr-input-reason" not in html:
+                feedback_missing.append(
+                    "inline input reason element (.cr-input-reason) — required "
+                    "because at least one action needs an input"
+                )
+        if feedback_missing:
+            raise WidgetFeedbackContractError(
+                "Rendered widget HTML has action buttons but is missing the "
+                "visible-feedback layer:\n  - "
+                + "\n  - ".join(feedback_missing)
+                + "\n\nClicks with invisible state are the F-58 bug class. "
+                "Render through render_chat_output_widget() and ship its "
+                "output byte-for-byte — never hand-build an action widget."
+            )
 
     missing = [
         (n, action, input_type)
@@ -2281,6 +2343,12 @@ def _detect_input_type(action: str) -> Optional[str]:
     # Bare `edit` for non-email contexts (don't-forget pending review etc.)
     if a == "edit":
         return "textarea-prepop"
+    # v4.5.2 S2 — `add email then send` promised a single-field address input
+    # since v3.13.8 but fell through to None here (no bracket placeholder), so
+    # the button was a dead toggle: the documented input never opened. Same
+    # silent-block family as F-17. Single-line email input, REQUIRED.
+    if a == "add email then send":
+        return "email-text"
     # Strict datetime picker (legacy, opt-in only)
     if "[date+time]" in a or "[datetime]" in a:
         return "datetime"
@@ -2313,16 +2381,12 @@ def _detect_input_type(action: str) -> Optional[str]:
     return None
 
 
-_DISPLAY_LABEL_OVERRIDES = {
-    # v2.14.38+ — explicit overrides for actions whose user-facing label needs
-    # special formatting that the default capitalize-first-letter pass can't
-    # produce. Action IDs stay machine-friendly; display labels stay
-    # human-readable.
-    "snooze 3d": "Snooze (3 days)",
-    "snooze 14d": "Snooze (14 days)",  # v3.13.2+ — intro-followup check uses 14d for the "did the intro land?" recheck
-    "not relevant": "Not relevant",  # default would also produce this; explicit so future edits don't regress the no-duration-in-UI rule
-    "didnt land": "Didn't land",  # v3.13.2+ — apostrophe restored in display label only
-}
+# v4.5.2 S2 (F-59) — display labels come from the verb taxonomy, one label
+# per wire id, everywhere. This is what killed Resolved-vs-Done and
+# Push-to-vs-Defer: `resolved` displays "Done", `push to [date]` displays
+# "Defer", `skip` displays "Snooze (1 day)" — and every mute states its
+# duration on the button. Never add a local label here; edit the table row.
+_DISPLAY_LABEL_OVERRIDES = dict(_TAXONOMY_DISPLAY_LABELS)
 
 
 def _action_display_label(action: str) -> str:
@@ -2415,15 +2479,36 @@ def _render_action_button(action: str, item_n, item: Optional[dict] = None) -> t
     label = _action_display_label(action)
     input_type = _detect_input_type(action)
 
+    # v4.5.2 S2 (F-17) — required-input contract. A selection whose required
+    # field is empty is INVALID: the widget highlights the row, names the
+    # missing thing inline, and holds Apply with the reason visible. The
+    # requirement + the missing-thing word ride on the button so the widget
+    # JS needs no separate lookup table.
+    is_required = action.lower() in REQUIRED_INPUT_ACTION_IDS
+    thing = required_input_thing(action) if is_required else ""
+
     btn_html = (
         f'<button class="cr-action" type="button" '
         f'data-n="{safe_n}" data-action="{safe_action}" '
         f'data-input-type="{input_type or "none"}" '
+        f'data-input-required="{"1" if is_required else "0"}" '
+        f'data-input-thing="{_html_mod.escape(thing, quote=True)}" '
         f'onclick="crToggle(this)">{_html_mod.escape(label)}</button>'
     )
 
     if input_type is None:
         return btn_html, ""
+
+    # Inline reason element, baked into every required action's wrapper so
+    # the F-17 feedback needs no DOM construction at click time. Hidden until
+    # the validator flags the selection.
+    reason_html = ""
+    if is_required:
+        reason_html = (
+            f'<div class="cr-input-reason" style="display:none;">'
+            f'{_html_mod.escape(label)} needs a {_html_mod.escape(thing)} '
+            f"before Apply can run — type it above.</div>"
+        )
 
     if input_type == "multi-field-email":
         # 4 separate fields pre-populated from item's metadata + body_lines.
@@ -2488,6 +2573,19 @@ def _render_action_button(action: str, item_n, item: Optional[dict] = None) -> t
             f'data-input-type="when-text" style="display:none;">'
             f'<input class="cr-input-field" type="text" '
             f'placeholder="e.g. Monday at 2pm, tomorrow afternoon, next Thursday, 2026-05-12" />'
+            f"{reason_html}"
+            f"</div>"
+        )
+    elif input_type == "email-text":
+        # v4.5.2 S2 — single-field address input for `add email then send`
+        # (the input the verb documented since v3.13.8 but never rendered).
+        input_html = (
+            f'<div class="cr-action-input" data-input-for-n="{safe_n}" '
+            f'data-input-for-action="{safe_action}" '
+            f'data-input-type="email-text" style="display:none;">'
+            f'<input class="cr-input-field" type="text" '
+            f'placeholder="name@example.com" />'
+            f"{reason_html}"
             f"</div>"
         )
     else:
@@ -2500,6 +2598,7 @@ def _render_action_button(action: str, item_n, item: Optional[dict] = None) -> t
             f'data-input-for-action="{safe_action}" '
             f'data-input-type="{input_type}" style="display:none;">'
             f'<input class="cr-input-field" type="{type_attr}" />'
+            f"{reason_html}"
             f"</div>"
         )
     return btn_html, input_html
@@ -2607,6 +2706,13 @@ def _render_widget_item(item: dict) -> str:
             if inp:
                 inputs_html.append(inp)
         parts.append(f'<div class="cr-item-actions">{"".join(buttons_html)}</div>')
+        # v4.5.2 S2 (F-59) — when a row offers fewer verbs than its siblings
+        # (needs-confirm items), it says WHY in one line. The orchestrator
+        # passes the reason; unexplained reduced verb sets read as broken
+        # buttons.
+        reduced_reason = item.get("reduced_verbs_reason", "")
+        if reduced_reason:
+            parts.append(f'<div class="cr-verbset-note">{_md_to_html(reduced_reason)}</div>')
         if inputs_html:
             parts.append(f'<div class="cr-item-inputs">{"".join(inputs_html)}</div>')
 
@@ -2693,6 +2799,14 @@ def _render_widget_item(item: dict) -> str:
                 f'style="display:none;" />'
                 f"</div>"
             )
+            # v4.5.2 S2 (F-59) — sub-items with a reduced verb set say why,
+            # same contract as parent items.
+            sub_reduced = sub.get("reduced_verbs_reason", "")
+            sub_reduced_html = (
+                f'<div class="cr-verbset-note">{_md_to_html(sub_reduced)}</div>'
+                if sub_reduced
+                else ""
+            )
             parts.append(
                 f'<div class="cr-sub-item" data-sub-id="{_html_mod.escape(sid_str, quote=True)}">'
                 f'<div class="cr-sub-row">'
@@ -2700,6 +2814,7 @@ def _render_widget_item(item: dict) -> str:
                 f'{sub_summary_html}'
                 f'<div class="cr-sub-actions">{"".join(sub_buttons_html)}</div>'
                 f"</div>"
+                f"{sub_reduced_html}"
                 f"{sub_inputs_block}"
                 f"{sub_note_html}"
                 f"</div>"
@@ -2897,12 +3012,82 @@ button.cr-btn-apply:hover { background: #C9A570 !important; border-color: #C9A57
 button.cr-btn-apply:disabled { background: #3A3530 !important; border-color: #3A3530 !important; color: #5E4F3F !important; cursor: not-allowed !important; }
 button.cr-btn-secondary { padding: 6px 12px !important; font-size: 12px !important; font-family: inherit !important; border: 1px solid #3A3530 !important; border-radius: 6px !important; background: #2A2520 !important; color: #E8E0D6 !important; cursor: pointer !important; }
 button.cr-btn-secondary:hover { background: #3A3530 !important; border-color: #5E4F3F !important; }
+/* Header stat tiles (v4.5.2 S2 — F-18 full-list layout; shared with the
+ * all-clear summary, which previously owned these rules). */
+.cr-counter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin: 12px 0; }
+.cr-counter-card { background: #14110F; border: 1px solid #2A2520; border-radius: 6px; padding: 10px 12px; }
+.cr-counter-label { font-size: 11px; color: #8C7A65; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+.cr-counter-value { font-size: 22px; color: #E8E0D6; font-weight: 500; }
+/* v4.5.2 S2 (F-17) — inline validation. A selected action missing its
+ * required input highlights its row, names the missing thing next to the
+ * field, and holds Apply with the reason on its own footer line. No state
+ * change in this widget is ever invisible. */
+.cr-item-invalid { border-left: 3px solid #C4703D !important; padding-left: 10px !important; background: rgba(196, 112, 61, 0.07); border-radius: 4px; }
+.cr-input-reason { margin-top: 4px; font-size: 12px; color: #E09A5F; }
+.cr-input-field.cr-input-missing { border-color: #C4703D !important; box-shadow: 0 0 0 1px rgba(196, 112, 61, 0.5) !important; }
+.cr-apply-reason { flex-basis: 100%; font-size: 12px; color: #E09A5F; }
+/* v4.5.2 S2 (F-59) — one-line explanation on rows whose verb set is
+ * reduced (needs-confirm items). */
+.cr-verbset-note { margin-top: 4px; font-size: 12px; color: #8C7A65; font-style: italic; }
 """.strip()
 
 
 _WIDGET_JS_TEMPLATE = """
 const crSelections = {};
 const crTotalItems = __TOTAL_ITEMS__;
+// W4 (2026-07) — widget source id. Stamped into every Apply-all
+// choice tuple as `src` so apply-choices can dispatch statelessly (no
+// 60-minute fire-marker window). Empty string on legacy data views that
+// don't pass source_skill — apply-choices falls back to the fire-marker.
+const crSrc = __CR_SRC__;
+
+function crFindActionButton(n, action) {
+  // Dataset-iteration lookup, same rationale as crFindInputWrapper (action
+  // strings contain spaces/brackets that break attribute selectors in some
+  // Cowork iframe builds).
+  const btns = document.querySelectorAll('.cr-action');
+  const nStr = String(n);
+  for (let i = 0; i < btns.length; i++) {
+    if (btns[i].dataset.n === nStr && btns[i].dataset.action === action) return btns[i];
+  }
+  return null;
+}
+
+// v4.5.2 S2 (F-17) — inline validation with disable-with-reason. A selected
+// action whose REQUIRED input is empty (Defer without a date was the
+// original: the whole batch silently refused to apply and M concluded the
+// button was dead) now: highlights the row, reveals the field with an
+// inline "needs a date" line, and holds Apply with the reason printed next
+// to it. Returns the list of invalid selections.
+function crValidate() {
+  document.querySelectorAll('.cr-item-invalid').forEach(function (el) { el.classList.remove('cr-item-invalid'); });
+  document.querySelectorAll('.cr-input-reason').forEach(function (el) { el.style.display = 'none'; });
+  document.querySelectorAll('.cr-input-field.cr-input-missing').forEach(function (el) { el.classList.remove('cr-input-missing'); });
+  const invalid = [];
+  Object.entries(crSelections).forEach(function ([n, action]) {
+    const btn = crFindActionButton(n, action);
+    if (!btn || btn.dataset.inputRequired !== '1') return;
+    const wrapper = crFindInputWrapper(n, action);
+    let field = null;
+    if (wrapper) field = wrapper.querySelector('textarea, input');
+    const value = field && field.value ? field.value.trim() : '';
+    if (value) return;
+    invalid.push({
+      n: n,
+      label: btn.textContent || action,
+      thing: btn.dataset.inputThing || 'value'
+    });
+    const rowEl = btn.closest('.cr-sub-item') || btn.closest('.cr-item');
+    if (rowEl) rowEl.classList.add('cr-item-invalid');
+    if (wrapper) {
+      wrapper.style.display = 'block';
+      const reason = wrapper.querySelector('.cr-input-reason');
+      if (reason) reason.style.display = 'block';
+      if (field) field.classList.add('cr-input-missing');
+    }
+  });
+  return invalid;
+}
 
 function crUpdateCounter() {
   const count = Object.keys(crSelections).length;
@@ -2924,6 +3109,21 @@ function crUpdateCounter() {
       break;
     }
   }
+  // F-17 gate: invalid selections hold Apply AND say why, right next to it.
+  const invalid = crValidate();
+  const reasonEl = document.getElementById('cr-apply-reason');
+  if (invalid.length > 0) {
+    applyBtn.disabled = true;
+    if (reasonEl) {
+      const first = invalid[0];
+      reasonEl.textContent = (invalid.length === 1)
+        ? 'Apply is waiting on item ' + first.n + ' \\u2014 ' + first.label + ' needs a ' + first.thing + '.'
+        : 'Apply is waiting on ' + invalid.length + ' items \\u2014 fill the highlighted fields.';
+      reasonEl.style.display = 'block';
+    }
+    return;
+  }
+  if (reasonEl) { reasonEl.textContent = ''; reasonEl.style.display = 'none'; }
   applyBtn.disabled = (count === 0) && !hasOrphanNote;
 }
 
@@ -3096,8 +3296,16 @@ function crSendPrompt(text) {
 }
 
 function crApplyAll() {
+  // F-17 backstop — Apply should already be disabled when a required input
+  // is missing, but never fire silently even if this is reached some other
+  // way (crSkipAll, stale DOM): re-validate, surface the reason, stop.
+  if (crValidate().length > 0) {
+    crUpdateCounter();
+    return;
+  }
   const choices = Object.entries(crSelections).map(function ([n, action]) {
     const choice = {n: n, action: action};
+    if (crSrc) choice.src = crSrc;  // W4 — stateless dispatch source id
     const inputWrapper = crFindInputWrapper(n, action);
     if (inputWrapper) {
       const inputType = inputWrapper.dataset.inputType;
@@ -3146,11 +3354,13 @@ function crApplyAll() {
     if (!v || !v.trim()) continue;
     if (seenNs.has(String(noteForN))) continue;  // already paired with an action — happy path
     // Orphan note. Synthesize an `add to my list` choice carrying just the context.
-    choices.push({
+    const orphanChoice = {
       n: noteForN,
       action: 'add to my list',
       context: v.trim()
-    });
+    };
+    if (crSrc) orphanChoice.src = crSrc;  // W4 — same source id as button choices
+    choices.push(orphanChoice);
     seenNs.add(String(noteForN));
   }
 
@@ -3213,6 +3423,13 @@ function crSkipAll() {
     // to be clickable in the first place).
     document.querySelectorAll('.cr-note-field').forEach(function (noteField) {
       noteField.addEventListener('input', crUpdateCounter);
+    });
+    // v4.5.2 S2 (F-17) — typing into any action input re-validates live, so
+    // the "needs a date" hold clears the moment the date lands.
+    document.querySelectorAll('.cr-action-input').forEach(function (wrapper) {
+      wrapper.querySelectorAll('textarea, input').forEach(function (f) {
+        f.addEventListener('input', crUpdateCounter);
+      });
     });
     crUpdateCounter();
   } catch (e) {

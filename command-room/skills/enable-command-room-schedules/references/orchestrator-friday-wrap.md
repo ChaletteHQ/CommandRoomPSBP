@@ -24,7 +24,7 @@ This file is the EXACT prompt the bootloader cats and executes for `taskId: frid
 
 2. **No narrating what's in the recap.** The user can see it. Don't follow with "Total events scanned: X" / "Files saved to..." / "Here's a summary of what I just posted."
 
-3. **No post-recap summary block.** The chat turn ends after the recap + Briefs section.
+3. **No post-recap summary block.** The chat turn ends after the recap + Briefs section. (EXCEPTION: the weekly-recap skill's one-time First-Run Personalization footer — see Phase 3 — is part of the defined recap tail; it is NOT a summary block and is allowed on the first fire only, gated by `is_configured`.)
 
 4. **No "regenerate with real data" mode.** If the user asks to re-fire, re-execute Phase 1 onward — don't switch to file-write mode.
 
@@ -52,6 +52,29 @@ The bootloader already resolved `PLUGIN_ROOT`, `WORKSPACE`, and the orchestrator
 - Read `<WORKSPACE>/CLAUDE.md` if it exists (hot cache for people, projects, terms — supplies most quick references without per-file reads).
 - Discover available connectors: Mail (Gmail or Outlook MCP — NEVER Zapier for read), Calendar (native Google or Outlook), Slack/Teams, Drive/OneDrive/SharePoint, every meeting-transcript source MCP wired (Granola / Fireflies / Otter / Read.ai / Zoom AI Companion / Microsoft Teams summaries). Per `EMAIL_DRAFT_PROTOCOL.md` §3c HARD SCOPE: Zapier is send-only; reads use native MCP.
 
+# Phase 2.9 — Run mode + lateness check (Phase 3 / R4; run-mode gate v4.5.2 R2 — runs BEFORE any surface is rendered)
+
+**Determine the run mode FIRST**, per `shared/RECEIPT_CONTRACT.md` § Run-mode detection: `scheduled` when this session was started by Cowork's scheduler executing this registered prompt (app-launch catch-up deliveries of a missed slot included); `manual` when a human caused the fire — a typed trigger, a Run Now click, a re-run request in an open chat. **When uncertain, it is `manual`**: a mis-labeled manual costs one missing lateness note; a mis-labeled scheduled fabricates lateness history (FINDINGS F-47 P1a — three false late_fire receipts in one afternoon).
+
+Cowork fires a missed slot at next app launch, hours or days late, and without this check the run would render a stale surface as if it were fresh. Compute the tier via the shared helper (never inline the math — thresholds live in ONE constant, `late_fire.LATENESS_TIERS`; all math is machine-local, the clock cron actually evaluates in), passing the detected run mode:
+
+```bash
+python3 -c "
+import sys, json; sys.path.insert(0, 'shared/scripts')
+from late_fire import check_lateness
+print(json.dumps(check_lateness('<workspace_root>', 'friday-wrap', fired_via='<scheduled|manual>')))
+"
+```
+
+Branch on `tier` (this does not weaken the anti-improvisation contract — every phase below still executes verbatim; the tier only governs what is RENDERED):
+
+- **`manual`** — an interactive fire is never late: run EVERY phase normally (connector pre-scans included — a run mode never adds skip conditions), with NO timing banner and NO lateness narrative of any kind, anywhere. The helper wrote no event; do not hand-compute lateness around it (FINDINGS F-47 P1a).
+- **`none` / `exempt` / `unknown`** — run normally. No mention of timing anywhere. `none` with a `suppressed` reason means the helper's ledger found the slot already served (a receipt exists after it) or minted by a schedule change — believe it: never re-derive lateness, never invent a cause ("the computer was probably asleep").
+- **`note` (3–24h late)** — run ALL phases normally, but the chat output OPENS with the returned `banner` line verbatim (one line, before anything else). Nothing else changes.
+- **`degrade` (>24h late)** — the surface is stale; do NOT render it. Execute every phase below EXCEPT the surface-rendering one (Phase 4 — Post the recap): all substrate writes the task owes — events, view updates, the Phase-final `pack_run` receipt — still happen, silently and explicitly (skipping them is the Bug #98 class: an invisible write must not lose to a suppressed deliverable). Then post ONLY the returned `degrade_notice` line as the entire chat output and STOP. No widget, no digest, no Links section. The next Morning Brief reads events.jsonl, so nothing captured is lost.
+
+The helper already appended the `late_fire` telemetry on note/degrade tiers (cleanup and the insight pass consume it to propose better default times) — do not append a second one, and never narrate the event or the tier name to the user. Carry the returned `receipt_fired_via` (`manual` / `scheduled` / `catchup`) into the fire receipt — it is the ONLY `fired_via` value `log_receipt` gets; never guess it independently.
+
 # Phase 3 — Execute the weekly-recap skill (by-project mode, 7-day window)
 
 Read `skills/weekly-recap/SKILL.md`. Execute its Phases 1-6 verbatim against the current workspace + connectors, with these orchestrator-imposed defaults:
@@ -61,6 +84,8 @@ Read `skills/weekly-recap/SKILL.md`. Execute its Phases 1-6 verbatim against the
 - **Connector caps:** use the skill's defaults (250 received + 250 sent emails, 200 Slack messages, 100 Drive files, 50 transcripts, all calendar events that occurred).
 - **scan-for-commitments side effect:** run per the skill's Phase 3. Commitments captured from the week's meetings deepen the recap's commitment counts.
 - **Output surfaces:** inline chat (markdown recap) + saved `.docx` at `_hq/meetings/Weekly_Recap_<YYYY-MM-DD>.docx` per the skill's Phase 5.
+- **Surface-preference filter (Phase 6 Loop 2):** when the recap surfaces per-person/per-project callouts the CEO could act on, drop any the CEO has taught the system to stop surfacing — `from surface_preferences import load_surface_preferences, is_suppressed`; keep a callout only if `not is_suppressed(prefs, "friday-wrap", item_class=<class>, entity_id=<person/project id>)`. Missing store → no-op; the recap's counts and substrate are untouched.
+- **First-Run Personalization (SPEC FRP1).** Apply the weekly-recap skill's "First-Run Personalization" section. Read the recap's knobs via `get_config(WORKSPACE, "weekly-recap", DEFAULTS)`. On the FIRST fire only (`not is_configured(WORKSPACE, "weekly-recap")`): `save_skill_config(WORKSPACE, "weekly-recap", DEFAULTS)` before rendering, then append the one-time **footer** form of the first-run block after the recap (this orchestrator is a markdown post, NOT a widget — the footer, not fr-items, is the correct transport here, and MUST-NOT rule 5 does not apply). The footer renders exactly once ever, gated by `is_configured`.
 
 Every connector read MUST emit corresponding events to `<WORKSPACE>/_hq/data/events.jsonl` per `shared/PASSIVE_CAPTURE.md` and the weekly-recap skill's batched `atomic_append_jsonl` pattern. Dedup via `source_ref_hash` so re-fires don't double-count.
 
@@ -86,10 +111,22 @@ If `_hq/meetings/` save failed for any reason (brief_writer error, path-resoluti
 
 Build the telemetry block via `shared/scripts/telemetry.py` `build_pack_run_telemetry()` — same pattern as the other orchestrators. Track connector calls + prompt/response sizes + duration. Merge into `pack_run.data` as `telemetry: {...}`. Silent — never narrated to chat.
 
-Append one `pack_run` event to `events.jsonl` via `atomic_append_jsonl`:
+Append the fire receipt via the canonical helper (`shared/scripts/receipts.py`, v4.5.2 R1 — **NEVER hand-roll the receipt JSON**; hand-rolled shapes are the F-10b/F-49 drift class). This receipt is REQUIRED on every fire — friday-wrap ran receiptless all of dogfood week (F-39/F-43):
 
-```json
-{"type": "pack_run", "source_skill": "friday-wrap", "primary_thread_id": null, "related_thread_ids": [], "classification_confidence": null, "data": {"task_id": "friday-wrap", "fired_at": "<ISO>", "recap_path": "_hq/meetings/Weekly_Recap_<YYYY-MM-DD>.docx", "window_start": "<ISO>", "window_end": "<ISO>", "events_captured": <N>, "commitments_found": <N>, "outcome": "complete", "telemetry": {...}}}
+```python
+from receipts import log_receipt
+log_receipt(
+    WORKSPACE_ROOT, "friday-wrap",
+    fired_via=lateness["receipt_fired_via"],  # from Phase 2.9 — manual | scheduled | catchup; never guess it
+    duration_ms=elapsed_ms,
+    late_tier=lateness["tier"] if lateness["tier"] in ("note", "degrade") else None,
+    extra_data={
+        "recap_path": "_hq/meetings/Weekly_Recap_<YYYY-MM-DD>.docx",
+        "window_start": "<ISO>", "window_end": "<ISO>",
+        "events_captured": N, "commitments_found": N,
+        "telemetry": {...},
+    },
+)
 ```
 
 Note: the weekly-recap skill ALSO appends its own `weekly_recap_run` event per its Phase 6. Both events coexist — the `weekly_recap_run` records the skill's invocation; the `pack_run` records the scheduled-task fire that invoked it. Same pattern as morning-brief / morning-briefing.
@@ -111,5 +148,5 @@ The single source of truth lives at `skills/weekly-recap/SKILL.md`. This orchest
 - Does NOT generate per-meeting prep briefs (that's `upcoming-meetings`).
 - Does NOT modify entities.json or aliases.json — weekly-recap only appends events. New people surfaced are queued for `people-crm` on the next turn via `pending_review: true` event annotations.
 - Does NOT fabricate data when a connector times out — per the weekly-recap skill's Phase 2 caps + footnote rule, output a footnote and continue without that source's data.
-- Does NOT fire on weekends if the cron is configured Friday-only (default `0 16 * * 5`). Manual trigger of `weekly recap` on any other day still works via the skill's on-demand path.
+- Does NOT fire on weekends if the cron is configured Friday-only (default `0 13 * * 5` — Phase 3/R4; pre-Phase-3 installs registered at `0 16 * * 5` keep their time). Manual trigger of `weekly recap` on any other day still works via the skill's on-demand path.
 - Does NOT replace `cleanup` (workspace health check) or `morning-brief` (daily digest). Different surfaces, different cadences.

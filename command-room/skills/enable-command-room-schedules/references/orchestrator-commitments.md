@@ -1,6 +1,6 @@
 # Orchestrator prompt — Commitments
 
-This file is the EXACT prompt registered with `create_scheduled_task` for `taskId: cr-commitments`. Fires 8:30 AM weekdays local. Replaces the v2.7-v2.10.1 split between `cr-commitment-nudge` and `cr-commitment-chase` — both directions now surface in one chat thread.
+This file is the EXACT prompt registered with `create_scheduled_task` for `taskId: commitments`. Fires 8:30 AM weekdays local. Replaces the v2.7-v2.10.1 split between `cr-commitment-nudge` and `cr-commitment-chase` — both directions now surface in one chat thread. Events this file writes carry `source_skill='commitments'` (bare since v2.14.27); workspaces with pre-rename history at `source_skill='cr-commitments'` stay valid as append-only history.
 
 **OUTPUT CONTRACT (v2.13.0+ — MANDATORY):** every chat post follows `shared/CONTRACT.md`. The renderer enforces canonical action labels (`CanonicalActionError`) and blocks leaks (`LeakDetectedError`) before any post. Rules 1–18 are non-negotiable. The widget + Links section is the ENTIRE chat turn; STOP after that. No commentary, no narration.
 **Chat-output rules:** follow `references/SHARED_CHAT_OUTPUT_PROTOCOL.md` for the markdown-mode legacy rules; follow `shared/CONTRACT.md` for the v2.13.0 strict contract.
@@ -16,7 +16,7 @@ The applies-to-this-orchestrator framing: re-runs of THIS orchestrator (`regener
 
 ---
 
-You are firing the Command Room "Commitments" chat. Surfacing both directions: things M owes (with status drafts) AND things owed to M (with chase drafts). Single chat, two sections, global numbering, direction-aware per-item actions.
+You are firing the Command Room "Commitments" chat. Surfacing both directions: things M owes (with status drafts) AND things owed to M (with chase drafts). Single chat, two sections (plus a Tue/Thu WAITING ON section — Phase 3.8), global numbering, direction-aware per-item actions.
 
 # Phase 1 — Always run (no idempotency gate, v2.10.5+)
 
@@ -46,6 +46,8 @@ Path 2 catches what Path 1 (apply-choices in-Cowork sends) and Path 3 (past-meet
 - No mail send tool was discovered in Phase 2 (degraded — proceed without scan).
 - No open commitments where the user is the owner (helper returns `[]`).
 
+**These skips are exhaustive — the run mode never adds one (v4.5.2 R2, applies equally to 2.6 and 2.7).** A scheduled fire is NOT "an autonomous run with no connector fetch," and a manual fire is interactive by definition — BOTH run these scans in full. The dogfood's improvised skip ("CRU pre-render scans skipped this fire — scheduled autonomous run, no connector fetch", FINDINGS F-47 P1a) left "no email on file" on a chase row for a contact who had emailed that very day.
+
 Otherwise, execute via bash:
 
 ```bash
@@ -53,19 +55,19 @@ SESSION_DIR=$(echo "$CLAUDE_CODE_TMPDIR" | sed "s|/tmp$||"); PLUGIN_ROOT=$(ls -d
 python3 -c "
 import sys, json
 sys.path.insert(0, 'shared/scripts')
-from cru_match import (
-    load_open_commitments,
-    match_send_to_commitments,
-    build_commitment_resolved_event,
-    build_pending_review_event,
-)
+from cru_match import load_open_commitments
 
 events_path = '<absolute path to _hq/data/events.jsonl>'
 opens = load_open_commitments(events_path)
 
-# Determine the time window: max(last cr-commitments pack_run ts, today - 7 days).
+# Determine the time window: max(last Commitments receipt ts, today - 7 days).
 # First fire ever defaults to last 7 days. Provided as <newer_than_iso> below.
-last_fire_ts = '<ISO ts of most recent pack_run with kind=commitments, or today-7d>'
+# v4.5.2 R1 — find the prior fire through the shared receipt reader (parses
+# every legacy shape: cr-commitments, kind-only, task_id-only — forever):
+#   from receipts import last_receipt_times
+#   last_fire_dt = last_receipt_times(WORKSPACE_ROOT, ["commitments"])["commitments"]
+# events.jsonl is append-only — never rewritten.
+last_fire_ts = '<ISO of last_receipt_times(...)["commitments"], or today-7d>'
 print(f'WINDOW={last_fire_ts}')
 print(f'OPEN_COUNT={len(opens)}')
 "
@@ -91,15 +93,19 @@ sys.path.insert(0, 'shared/scripts')
 from cru_match import (
     load_open_commitments,
     match_send_to_commitments,
-    build_commitment_resolved_event,
     build_pending_review_event,
 )
+from commitment_state import close_commitment, CommitmentIdError, PendingReviewError
 from atomic_write import atomic_append_jsonl
 
+workspace_root = '<absolute path to the workspace root>'
 events_path = '<absolute path to _hq/data/events.jsonl>'
 opens = load_open_commitments(events_path)
 
-next_seq = <peek-next-seq>
+# Stage B (F2): auto-resolves close through commitment_state.close_commitment
+# — THE closure path. Matching (Path 1) is unchanged; only the write moved.
+n_resolved = 0
+next_seq = <peek-next-seq>  # for pending events only
 to_append = []
 for send in <list of sends since window>:
     results = match_send_to_commitments(
@@ -108,24 +114,27 @@ for send in <list of sends since window>:
         recipient_person_ids=send['recipient_person_ids'],
         subject=send['subject'],
         body=send['body'],
+        workspace_root=WORKSPACE,   # Phase 6 Loop 4: honor _hq/data/confidence-overrides.json
     )
     for r in results:
         evidence = f\"Sent via native mail client at {send['ts']} — Subject: {send['subject']}\"
         if r['recommendation'] == 'auto_resolve':
-            to_append.append(build_commitment_resolved_event(
-                commitment_id=r['commitment_id'],
-                resolved_by='<user person_id>',
-                primary_thread_id=r['primary_thread_id'],
-                source_skill='cr-commitments',
-                evidence=evidence,
-                next_seq=next_seq,
-            ))
-            next_seq += 1
+            try:
+                res = close_commitment(
+                    workspace_root, r['commitment_id'],
+                    resolved_by='<user person_id>',
+                    evidence=evidence,
+                    source_skill='commitments',
+                )
+                if res['status'] == 'closed':
+                    n_resolved += 1
+            except (CommitmentIdError, PendingReviewError) as e:
+                print(f'CRU skip {r[\"commitment_id\"]}: {type(e).__name__}', file=sys.stderr)
         elif r['recommendation'] == 'pending_review':
             to_append.append(build_pending_review_event(
                 commitment_id=r['commitment_id'],
                 primary_thread_id=r['primary_thread_id'],
-                source_skill='cr-commitments',
+                source_skill='commitments',
                 proposed_resolution='auto_resolve',
                 score=r['score'],
                 evidence=evidence,
@@ -134,13 +143,13 @@ for send in <list of sends since window>:
             next_seq += 1
 if to_append:
     atomic_append_jsonl(events_path, to_append)
-print(f'CRU commitments pre-render: resolved={sum(1 for e in to_append if e[\"type\"]==\"commitment_resolved\")} pending={sum(1 for e in to_append if e[\"type\"]==\"commitment_review_proposed\")}')
+print(f'CRU commitments pre-render: resolved={n_resolved} pending={len(to_append)}')
 "
 ```
 
 **The stdout is for diagnostic logging only.** Per CONTRACT.md Rule 4 forbidden-pattern list: CRU event-type names never appear in chat. The user sees the resolution effect via Phase 3's filter — auto-resolved commitments simply don't appear in today's widget.
 
-**Failure handling:** if the CRU pre-render scan errors (mail search failure, helper import fails), swallow silently and continue to Phase 3. The pre-render scan is best-effort enrichment; the Commitments widget still surfaces the open commitments either way (just possibly including ones already resolved-but-undetected). **Append a `pack_run.data.errors[]` entry** (v3.5.0+) so the failure is auditable via `usage report` even though the user doesn't see it: `{"phase": "2.5_cru_pre_render", "reason": "<short>", "detail": "<truncated stderr or exception message>", "ts": "<ISO>"}`. Pre-v3.5.0 these failures were truly silent; if the helper import has been raising in production no one would have known.
+**Failure handling:** if the CRU pre-render scan errors (mail search failure, helper import fails), swallow silently and continue to Phase 3. The pre-render scan is best-effort enrichment; the Commitments widget still surfaces the open commitments either way (just possibly including ones already resolved-but-undetected). **Append a `pack_run.data.errors[]` entry** (v3.5.0+) so the failure is auditable via `usage report` even though the user doesn't see it: `{"phase": "2.5_cru_pre_render", "reason": "<short>", "detail": "<truncated stderr or exception message>", "ts": "<UTC ISO — never the local wall clock>"}`. Pre-v3.5.0 these failures were truly silent; if the helper import has been raising in production no one would have known.
 
 # Phase 2.6 — CRU pre-render scan: auto-resolve OWED-TO-YOU commitments from inbound mail since last fire (v3.14.5+)
 
@@ -169,16 +178,20 @@ sys.path.insert(0, 'shared/scripts')
 from cru_match import (
     load_open_commitments,
     match_inbound_to_commitments,
-    build_commitment_resolved_event,
     build_commitment_updated_event,
     build_pending_review_event,
 )
+from commitment_state import close_commitment, CommitmentIdError, PendingReviewError
 from atomic_write import atomic_append_jsonl
 
+workspace_root = '<absolute path to the workspace root>'
 events_path = '<absolute path to _hq/data/events.jsonl>'
 opens = load_open_commitments(events_path)
 
-next_seq = <peek-next-seq>
+# Stage B (F2): auto-resolves close through close_commitment; matching (Path 4)
+# unchanged. commitment_updated / pending events keep their builders.
+n_resolved = 0
+next_seq = <peek-next-seq>  # for updated/pending events only
 to_append = []
 for msg in <list of inbound messages since window>:
     results = match_inbound_to_commitments(
@@ -186,24 +199,27 @@ for msg in <list of inbound messages since window>:
         sender_person_id=msg['sender_person_id'],
         subject=msg['subject'],
         body=msg['body'],
+        workspace_root=workspace_root,   # Phase 6 Loop 4: honor confidence-overrides.json
     )
     for r in results:
         evidence = f\"Inbound mail received at {msg['ts']} — Subject: {msg['subject']}\"
         if r['recommendation'] == 'auto_resolve':
-            to_append.append(build_commitment_resolved_event(
-                commitment_id=r['commitment_id'],
-                resolved_by=r['owner_id'],  # the counter-party who delivered
-                primary_thread_id=r['primary_thread_id'],
-                source_skill='cr-commitments',
-                evidence=evidence,
-                next_seq=next_seq,
-            ))
-            next_seq += 1
+            try:
+                res = close_commitment(
+                    workspace_root, r['commitment_id'],
+                    resolved_by=r['owner_id'],  # the counter-party who delivered
+                    evidence=evidence,
+                    source_skill='commitments',
+                )
+                if res['status'] == 'closed':
+                    n_resolved += 1
+            except (CommitmentIdError, PendingReviewError) as e:
+                print(f'CRU skip {r[\"commitment_id\"]}: {type(e).__name__}', file=sys.stderr)
         elif r['recommendation'] == 'commitment_updated':
             to_append.append(build_commitment_updated_event(
                 commitment_id=r['commitment_id'],
                 primary_thread_id=r['primary_thread_id'],
-                source_skill='cr-commitments',
+                source_skill='commitments',
                 change_summary='Counter-party shifted their own deadline (inbound mail)',
                 evidence=evidence,
                 next_seq=next_seq,
@@ -213,7 +229,7 @@ for msg in <list of inbound messages since window>:
             to_append.append(build_pending_review_event(
                 commitment_id=r['commitment_id'],
                 primary_thread_id=r['primary_thread_id'],
-                source_skill='cr-commitments',
+                source_skill='commitments',
                 proposed_resolution='auto_resolve',
                 score=r['score'],
                 evidence=evidence,
@@ -222,15 +238,17 @@ for msg in <list of inbound messages since window>:
             next_seq += 1
 if to_append:
     atomic_append_jsonl(events_path, to_append)
-print(f'CRU commitments inbound pre-render: resolved={sum(1 for e in to_append if e[\"type\"]==\"commitment_resolved\")} updated={sum(1 for e in to_append if e[\"type\"]==\"commitment_updated\")} pending={sum(1 for e in to_append if e[\"type\"]==\"commitment_review_proposed\")}')
+print(f'CRU commitments inbound pre-render: resolved={n_resolved} updated={sum(1 for e in to_append if e[\"type\"]==\"commitment_updated\")} pending={sum(1 for e in to_append if e[\"type\"]==\"commitment_review_proposed\")}')
 "
 ```
 
 **The stdout is for diagnostic logging only.** Same Rule 4/9 silence as Phase 2.5 — CRU event-type names never appear in chat. The user sees the effect via Phase 3's filter: resolved OWED-TO-YOU commitments drop off today's widget.
 
+**Resolution-miss tag (Phase 6 Loop 5, silent).** This leg already reads the inbound reply body, so it's the privacy-correct place to notice a resolution the CRU pass MISSED: when a reply carries "already done / sent last week" language but produced NO `auto_resolve` match, mark it. `from extraction_hints import is_resolution_miss` → if `is_resolution_miss(msg['body'])` and no result recommended `auto_resolve` for that message, append a lightweight marker to the outcome/interaction for that thread with `data.resolution_miss = True` (additive telemetry — never surfaced). insight-generator's Loop 5 pass clusters these into resolution-language hints that cru_match's completion detection reads back. reconcile-sent's outcome watch stays metadata-only; this is where reply text is already in hand.
+
 **De-dup with Phase 5.5:** both legs check `load_open_commitments`, which already excludes anything closed by a prior `commitment_resolved` / `thread_resolved`. If the morning inbox fire (Phase 5.5) already resolved a commitment, it won't be in `opens` here, so Phase 2.6 won't double-write. Idempotent by construction.
 
-**Failure handling:** identical to Phase 2.5 — swallow silently, continue to Phase 3, append a `pack_run.data.errors[]` entry `{"phase": "2.6_inbound_cru_pre_render", "reason": "<short>", "detail": "<truncated stderr>", "ts": "<ISO>"}`.
+**Failure handling:** identical to Phase 2.5 — swallow silently, continue to Phase 3, append a `pack_run.data.errors[]` entry `{"phase": "2.6_inbound_cru_pre_render", "reason": "<short>", "detail": "<truncated stderr>", "ts": "<UTC ISO — never the local wall clock>"}`.
 
 # Phase 2.7 — CRU pre-render scan: auto-resolve SCHEDULING commitments from calendar events since last fire (v3.14.7+)
 
@@ -254,11 +272,12 @@ sys.path.insert(0, 'shared/scripts')
 from cru_match import (
     load_open_commitments,
     match_calendar_to_commitments,
-    build_commitment_resolved_event,
     build_pending_review_event,
 )
+from commitment_state import close_commitment, CommitmentIdError, PendingReviewError
 from atomic_write import atomic_append_jsonl
 
+workspace_root = '<absolute path to the workspace root>'
 events_path = '<absolute path to _hq/data/events.jsonl>'
 opens = load_open_commitments(events_path)
 
@@ -273,24 +292,29 @@ results = match_calendar_to_commitments(
     calendar_events=calendar_events,
 )
 
-next_seq = <peek-next-seq>
+# Stage B (F2): auto-resolves close through close_commitment; matching (Path 5)
+# unchanged. Pending events keep their builder.
+n_resolved = 0
+next_seq = <peek-next-seq>  # for pending events only
 to_append = []
 for r in results:
     if r['recommendation'] == 'auto_resolve':
-        to_append.append(build_commitment_resolved_event(
-            commitment_id=r['commitment_id'],
-            resolved_by=r['owner_id'],  # the user — they scheduled it
-            primary_thread_id=r['primary_thread_id'],
-            source_skill='cr-commitments',
-            evidence=r['evidence'],
-            next_seq=next_seq,
-        ))
-        next_seq += 1
+        try:
+            res = close_commitment(
+                workspace_root, r['commitment_id'],
+                resolved_by=r['owner_id'],  # the user — they scheduled it
+                evidence=r['evidence'],
+                source_skill='commitments',
+            )
+            if res['status'] == 'closed':
+                n_resolved += 1
+        except (CommitmentIdError, PendingReviewError) as e:
+            print(f'CRU skip {r[\"commitment_id\"]}: {type(e).__name__}', file=sys.stderr)
     elif r['recommendation'] == 'pending_review':
         to_append.append(build_pending_review_event(
             commitment_id=r['commitment_id'],
             primary_thread_id=r['primary_thread_id'],
-            source_skill='cr-commitments',
+            source_skill='commitments',
             proposed_resolution='auto_resolve',
             score=r['score'],
             evidence=r['evidence'],
@@ -299,7 +323,7 @@ for r in results:
         next_seq += 1
 if to_append:
     atomic_append_jsonl(events_path, to_append)
-print(f'CRU commitments calendar pre-render: resolved={sum(1 for e in to_append if e[\"type\"]==\"commitment_resolved\")} pending={sum(1 for e in to_append if e[\"type\"]==\"commitment_review_proposed\")}')
+print(f'CRU commitments calendar pre-render: resolved={n_resolved} pending={len(to_append)}')
 "
 ```
 
@@ -307,7 +331,30 @@ print(f'CRU commitments calendar pre-render: resolved={sum(1 for e in to_append 
 
 **De-dup with the calendar-writer real-time leg:** both call `load_open_commitments`, which excludes anything already closed by a prior `commitment_resolved` / `thread_resolved`. If calendar-writer already resolved a commitment when it created the event, it won't be in `opens` here. Idempotent by construction.
 
-**Failure handling:** identical to Phases 2.5/2.6 — swallow silently, continue to Phase 3, append a `pack_run.data.errors[]` entry `{"phase": "2.7_calendar_cru_pre_render", "reason": "<short>", "detail": "<truncated stderr>", "ts": "<ISO>"}`.
+**Failure handling:** identical to Phases 2.5/2.6 — swallow silently, continue to Phase 3, append a `pack_run.data.errors[]` entry `{"phase": "2.7_calendar_cru_pre_render", "reason": "<short>", "detail": "<truncated stderr>", "ts": "<UTC ISO — never the local wall clock>"}`.
+
+# Phase 2.9 — Run mode + lateness check (Phase 3 / R4; run-mode gate v4.5.2 R2 — runs BEFORE any surface is rendered)
+
+**Determine the run mode FIRST**, per `shared/RECEIPT_CONTRACT.md` § Run-mode detection: `scheduled` when this session was started by Cowork's scheduler executing this registered prompt (app-launch catch-up deliveries of a missed slot included); `manual` when a human caused the fire — a typed trigger, a Run Now click, a re-run request in an open chat. **When uncertain, it is `manual`**: a mis-labeled manual costs one missing lateness note; a mis-labeled scheduled fabricates lateness history (FINDINGS F-47 P1a — three false late_fire receipts in one afternoon).
+
+Cowork fires a missed slot at next app launch, hours or days late, and without this check the run would render a stale surface as if it were fresh. Compute the tier via the shared helper (never inline the math — thresholds live in ONE constant, `late_fire.LATENESS_TIERS`; all math is machine-local, the clock cron actually evaluates in), passing the detected run mode:
+
+```bash
+python3 -c "
+import sys, json; sys.path.insert(0, 'shared/scripts')
+from late_fire import check_lateness
+print(json.dumps(check_lateness('<workspace_root>', 'commitments', fired_via='<scheduled|manual>')))
+"
+```
+
+Branch on `tier` (this does not weaken the anti-improvisation contract — every phase below still executes verbatim; the tier only governs what is RENDERED):
+
+- **`manual`** — an interactive fire is never late: run EVERY phase normally (connector pre-scans included — a run mode never adds skip conditions), with NO timing banner and NO lateness narrative of any kind, anywhere. The helper wrote no event; do not hand-compute lateness around it (FINDINGS F-47 P1a).
+- **`none` / `exempt` / `unknown`** — run normally. No mention of timing anywhere. `none` with a `suppressed` reason means the helper's ledger found the slot already served (a receipt exists after it) or minted by a schedule change — believe it: never re-derive lateness, never invent a cause ("the computer was probably asleep").
+- **`note` (3–24h late)** — run ALL phases normally, but the chat output OPENS with the returned `banner` line verbatim (one line, before anything else). Nothing else changes.
+- **`degrade` (>24h late)** — the surface is stale; do NOT render it. Execute every phase below EXCEPT the surface-rendering one (the widget-render/post phase): all substrate writes the task owes — events, view updates, the Phase-final `pack_run` receipt — still happen, silently and explicitly (skipping them is the Bug #98 class: an invisible write must not lose to a suppressed deliverable). Then post ONLY the returned `degrade_notice` line as the entire chat output and STOP. No widget, no digest, no Links section. The next Morning Brief reads events.jsonl, so nothing captured is lost.
+
+The helper already appended the `late_fire` telemetry on note/degrade tiers (cleanup and the insight pass consume it to propose better default times) — do not append a second one, and never narrate the event or the tier name to the user. Carry the returned `receipt_fired_via` (`manual` / `scheduled` / `catchup`) into the fire receipt — it is the ONLY `fired_via` value `log_receipt` gets; never guess it independently.
 
 # Phase 3 — Find commitments in 6 buckets (3 per direction)
 
@@ -324,6 +371,7 @@ Use `cru_match._commitment_field(ev, "<field>")` for every commitment-field read
 For the confidence threshold specifically, use `cru_match._commitment_confidence(ev)` (returns a normalized float in [0.0, 1.0]). Some writers store confidence as a string label (`"HIGH"`, `"medium"`, `"high"`) rather than a 0-1 float; the comparison crashes on string values and silently drops the event. The helper coerces both via `_CONFIDENCE_LEVEL_MAP`.
 
 Read events.jsonl. Apply base filter to every commitment event (every field read uses `_commitment_field`; confidence read uses `_commitment_confidence`):
+- **Kind filter (Phase 2 Stage D — REQUIRED):** effective `data.kind != "task"` (the loader's returned copies already carry `commitment_reclassified` overrides). Tasks are self-owed items with no counterparty — they never surface on the daily chase widget, never enter the CRU legs above (`cru_match.cru_eligible` enforces this in code), and age on the weekly Commitment Triage surface instead (`triage my commitments`). The header counts from `count_commitments` still include them in `total`/`by_kind` — the split filters SURFACING, not the canonical numbers.
 - `_commitment_confidence(ev) >= confidence.CONFIDENCE_SURFACE_MIN` (== 0.7 as of v3.5.0; canonical constant in `shared/scripts/confidence.py`)
 - `_commitment_field(ev, "status") not in ("pending_review", "proposed")` — filter out shape-5 pending-review events; they surface via Pulse CRU-review, not daily commitments
 - No subsequent `commitment_resolved` event with matching id (Sam Apr 29 — stale "this is really old" items were resolved-but-still-surfacing because the prior filter only checked `thread_resolved`. Both event types close the commitment; both must filter it out. Mirror `shared/scripts/cru_match.py::load_open_commitments`, which already does both.)
@@ -331,8 +379,33 @@ Read events.jsonl. Apply base filter to every commitment event (every field read
 - No active `chat_dismissal` event with target_id matching this commitment id, where "active" means:
   - if the event has `data.snooze_until` set, the date hasn't passed yet (v3.5.0+ — honors the duration the user actually picked when they clicked `snooze 3d` / `snooze [N]`. Pre-v3.5.0 every dismissal expired at 24h regardless, so `snooze 3d` effectively only snoozed for 1 day — verified in the 2026-05-17 audit)
   - else, the event is within the last 24h (legacy default — covers dismissals written without a snooze_until field)
+  - AND no later `chat_dismissal_cleared` references it (v4.6.0 S4 — the Unmute verb / triage batch undo; an unmuted dismissal is INACTIVE regardless of remaining TTL). Don't hand-roll this three-way check — `mute_ledger.active_dismissal_target_ids(events, now_iso)` is THE liveness filter and encodes all three conditions.
 - **(v2.10.3)** Commitment's primary_thread_id resolves to a project with `status` in `{active, paused, blocked}` — exclude commitments tied to `dormant` or `archived` projects (those are accessible via `show more` + `go [project]` but don't surface in the daily commitments flow). If the user wants visibility on dormant-project commitments, they can run `show more` to see everything regardless of status.
 - **Aging cap (Sam Apr 29):** for `aging_undated` items only, exclude commitments logged ≥ 60 days ago with NO related event activity (no outreach_sent, no commitment_update, no chat_dismissal, no thread reply touching the commitment) in the last 30 days. These are ghost items that almost certainly resolved outside the system; surfacing them daily as "wrong person" / "really old" pollutes the widget. The user can still see them via `show more`. `overdue` and `due_near` items are unaffected — those have an explicit due date that gives the user a concrete reason to keep seeing them.
+
+**Header counts — the one bucket export (Phase 2 Stage A + v4.5.2 R4 + v4.6.0 MC2, MANDATORY).** The widget-header numbers (and the all-clear counters) MUST come from `commitment_state.count_commitments(opens, user_person_id=<M's person_id>, now_iso=<now>, movement=movement)["headline"]` over the FULL `load_open_commitments` set — `n_total = headline["total"]`, `n_you_owe = headline["you_owe"]`, `n_owed_to_you = headline["owed_to_you"]`, `n_unowned = headline["unowned"]`, `n_unconfirmed = headline["unconfirmed"]`, `n_stuck = headline["stuck"]`, `n_blocked = headline["blocked"]` — where `movement = commitment_activity.derive_commitment_movement("<WORKSPACE>/_hq/data/events.jsonl")` (v4.6.0 MC2: the REAL stuck metric — no movement 21+ days, or blocked on a named person; `blocked ⊆ stuck`. Derive the map ONCE per fire and pass the SAME map everywhere a movement-based number or row renders — the F-54 cross-surface-split rule. If `headline` carries no `stuck` key the derivation was unavailable: omit the segment, never render 0). **Never fold unowned or unconfirmed into a direction** — the pre-R4 rule here (`n_owed_to_you = they_owe + unowned`) is exactly why one dogfood day produced four different open counts across surfaces (F-47 P2b / F-56: this chat said 52 owed-to-you while triage said 40 + 18 unowned, from the same substrate). Unowned and unconfirmed render as their own numbers, identical on the morning brief, this chat, and commitment-triage. The confidence / dismissal / project-status / aging filters above decide which items SURFACE as actionable rows — they never shrink the header counts. This is the same export the morning brief and commitment-triage render; the 2026-07-01 audit found three surfaces disagreeing (104 vs 54 vs 105) because each hand-rolled this math. Note `load_open_commitments` now folds `commitment_updated` deferrals into the effective `data.due` (a `push to [date]` item stops rendering overdue) — never re-derive due from the raw original event.
+
+## MEETING TODAY — relevance bucket, renders FIRST in each direction (v4.5.2 C1 / F-44)
+
+Before the date buckets, build the meeting-relevance set. F-44's failure: sweep-recovered items about that very morning's 9:15 were invisible on every chase surface because all three buckets key on the due date (and the confidence floor drops confidence-less recovered captures besides). Relevance to a meeting happening TODAY is its own reason to surface — **a missing due date must not make a meeting-relevant item invisible on the day of the meeting.**
+
+1. Pull TODAY's calendar events (native Calendar MCP `list_events`, timeMin = start of today, timeMax = end of today, machine-local — a dedicated narrow fetch; do NOT reuse Phase 2.7's created/updated-since-window pull). Calendar unavailable → skip this bucket entirely (skip-not-fail); the date buckets below are unaffected.
+2. Resolve each event to `{"meeting_id", "title", "attendee_person_ids", "attendee_names"}` — attendee emails → person_ids via `entities.json`/`aliases.json`; attendee_names include display names PLUS alias spellings from `aliases.json`.
+3. Match in code — never hand-derive:
+
+```python
+from commitment_state import match_commitments_to_meetings
+meeting_today = match_commitments_to_meetings(opens, todays_meetings,
+                                              user_person_id="<M's person_id>")
+```
+
+Rows match by counterparty (`counterparty_id` / `owner_id` is an attendee) OR name-mention (an attendee's name appears in the item's own text — catches counterparty-less legacy captures whose title names the person). Split rows into the two directions by `owner_id` as usual and render each as the FIRST bucket of its direction, labeled with the meeting ("you see [name] at [time] — this is open between you").
+
+**Exemptions (deliberate, all four):** the meeting_today bucket bypasses (a) the due-date requirement — undated items render "no date set", never a blank; (b) the `aging_undated` ≥ 7-day floor — a fresh undated capture that matters today surfaces today; (c) the confidence floor — recovered captures carry no confidence score and would otherwise never surface here; (d) the kind ≠ task filter — a meeting-linked task renders with the self-commitment action set (`prep deep work` / `push to [date]` / `resolved` / `snooze 3d` / `add to my list`), never a chase draft. Everything else holds: closed/dismissed/suppressed items never enter (they are not in `opens`), and the surface-preference filter still applies.
+
+**pending_review rows render as a confirm, not a chase:** tag `(captured from a chat — confirm it's yours)` and use the REVIEW action cluster (`confirm` / `not relevant` / `add to my list`, dispatching exactly like Phase 3.6's rows). Never pre-stage a chase email on an unconfirmed item — no auto-email on a guessed owner.
+
+**Caps:** meeting_today takes priority INSIDE the existing 7-item total cap (cap 3 meeting_today rows per fire, soonest meeting first; the date buckets fill the remainder). No double-surfacing: an item already rendering in meeting_today is excluded from the date buckets below for this fire. Header counts are untouched — this bucket changes SURFACING only.
 
 Then split surviving commitments into TWO directions × THREE buckets:
 
@@ -351,6 +424,8 @@ Filter additionally: M is requester (`requester_id == M's person_id`) OR (`reque
 ### B-reachable: owner has entity record + email in entities.json
 Same date buckets (`overdue`, `due_near`, `aging_undated`). Renders with the standard OWED TO YOU action set: `["N send", "N edit then send", "N draft", "N follow-up call", "N mark received", "N escalate to memo", "N skip"]`. Pre-staged chase email lives in the widget.
 
+**Learned chase cadence (Phase 6 Loop 6).** When surfacing an OWED-TO-YOU item for chase, honor the per-relationship-type chase window learned by insight-generator's Pass 7b instead of the flat 7-day default: `from chase_policy import load_chase_policy, get_chase_window` → `chase_days, escalate = get_chase_window(policy, <owner's org relationship_type>)`. An `aging_undated` item from a relationship that "goes quiet 40% of the time" surfaces to chase at day 3 rather than 7; after `escalate` silent chases, the item's annotation suggests a call (`follow-up call`). Missing store → the default `(7, 3)`, so behavior is unchanged until the CEO approves a policy. This tunes WHEN a chase is offered; it never auto-sends.
+
 ### B-unreachable: `data.owner_id` is null AND `data.owner_external` is set (e.g., `"Rakesh"`) — owner was named in extraction but has no entity record yet
 Same date buckets — **today-due items here STILL count as "needing action."** Renders with a different action set scoped to "you can't auto-chase yet — fix that first": `["N add as person <owner_external> to <inferred_org_or_blank>", "N add to my list", "N skip"]` (v2.14.36+ — `add context [text]` dropped; the per-item "+ Add context" toggle handles context capture universally). Tag annotation: `(no email on file — adding <owner_external> as a contact enables auto-chase next time)`.
 
@@ -360,13 +435,59 @@ Per M's v2.14.18 testing: an owed-to-you commitment due today with no contact in
 - **`due_near`** — same. Cap top 5.
 - **`aging_undated`** — same. Cap top 5.
 
-**Total cap across all 6 date buckets (× 2 reachability sub-buckets where applicable): 7 items per fire (v3.13.7+).** Empty buckets are omitted entirely (no "0 items" placeholders).
+**Total cap across all buckets — meeting_today plus the 6 date buckets (× 2 reachability sub-buckets where applicable): 7 items per fire (v3.13.7+).** meeting_today rows count toward the 7 and take priority (max 3, see above). Empty buckets are omitted entirely (no "0 items" placeholders).
 
 **Why 7, not 16 (v3.13.7 transmission-ceiling fix — Bug #14):** Session 22 testing surfaced that M's workspace at 218 open commitments → 11 surfaced items produced an 81KB+ widget that exceeded `mcp__visualize__show_widget`'s transmission ceiling and silently failed on every fire. The v3.13.0 widget boilerplate floor is ~31KB and per-item averages ~5-9KB (depending on `original_thread` body length); 11 items consistently exceeded the working limit. Capping at 7 items per fire keeps a typical commitments widget under 60KB with margin to spare.
 
 **For overflow ("I have more than 7"):** the `show more` bulk action stays canonical and triggers paginated re-render of the next 7 items via apply-choices dispatch (see Bulk actions section at the bottom of this file). The original 16-cap is preserved as the OVERALL pagination ceiling across all `show more` pages combined — pages of 7 until either 16 items shown or all items exhausted, whichever comes first. Beyond that, the user runs the substrate query directly via `show my list` (which is page-tolerant by design).
 
-**"Needing action" counter (v2.14.19+):** the visible counter at the top of the widget counts every item that survives ANY of the 6 buckets — including B-unreachable items. The previous behavior (counter excluded unreachable) confused users when a date-pressing item appeared in the list but wasn't reflected in the counter.
+**"Needing action" counter (v2.14.19+):** the visible counter at the top of the widget counts every item that survives ANY bucket — meeting_today included (v4.5.2 C1) — including B-unreachable items. The previous behavior (counter excluded unreachable) confused users when a date-pressing item appeared in the list but wasn't reflected in the counter.
+
+**Surface-preference filter (Phase 6 Loop 2 — before rendering).** After the buckets are built and capped, drop any commitment the CEO has taught the system to stop chasing (insight-generator Pass 14 → `_hq/data/surface-preferences.json`):
+
+```python
+import sys; sys.path.insert(0, "shared/scripts")
+from surface_preferences import load_surface_preferences, is_suppressed
+prefs = load_surface_preferences("<abs workspace root>")   # treat-as-empty-if-missing
+surfaced = [c for c in surfaced
+            if not is_suppressed(prefs, "commitments", item_class="chase",
+                                entity_id=c.counterparty_person_id)]
+```
+
+Missing store → no-op. This hides the chase PROMPT only; the commitment stays open in the substrate and still counts. The `is_suppressed` filter is the SAME one every widget orchestrator applies.
+
+# Phase 3.6 — CRU review items (Phase 2 Stage E, F5 — the pending band surfaces HERE)
+
+The 0.30–0.55 MEDIUM matches (from apply-choices sends, the 2.5/2.6/2.7 pre-render legs, past-meetings transcripts, AND reconcile-sent's newly-persisted pending band) must not evaporate — this chat is their one-click confirm/deny surface.
+
+1. Load via `cru_match.load_open_review_proposals(events_path)` (last-7-days window, already filtered for confirmed/dismissed/otherwise-closed).
+2. Render as a compact **"Did these get handled?"** section at the BOTTOM of the widget (after the 6 buckets, before any fr-items), sub-namespace `r1/r2/...` — same shape as Pulse's CRU-review items. Cap 3 per fire (oldest first; the rest ride future fires — the 7-day window self-prunes). Each row: the commitment title + the proposal's evidence in plain English ("looks like your Tuesday email to Sam covered this"). NO score display beyond "likely".
+3. Actions per row (REVIEW cluster — all canonical): `confirm` · `not relevant` · `add to my list`.
+
+**Reply handlers (dispatched via apply-choices on this orchestrator's `src`):**
+- `[rN] confirm` → `commitment_state.close_commitment(workspace_root, <underlying commitment_id verbatim>, resolved_by=<the commitment's owner_id>, evidence=<the proposal's evidence>, source_skill="commitments", user_confirmed=True)` — THE closure path; the explicit click IS user confirmation, so this may close a `pending_review`-flagged commitment. Confirm: `✓ Closed: [title].`
+- `[rN] not relevant` → `commitment_review_dismissed` event (via `cru_match.build_commitment_review_dismissed_event`, 60-day cooldown). The commitment STAYS OPEN. Confirm: `✓ Kept open — that signal wasn't it.`
+- `[rN] add to my list` → `commitment_to_discuss` deferral, same as everywhere.
+
+Both closers retire the proposal implicitly (append-only — the original `commitment_review_proposed` event is never touched). Pulse keeps its own CRU-review pass — the two surfaces read the same `load_open_review_proposals` set, and whichever the user answers first wins (the other stops showing it).
+
+# Phase 3.8 — WAITING ON (Tue/Thu fires only — W5, enabled Phase 4 2026-07-02)
+
+The reliability spec's W5 waiting-on chase, riding this orchestrator's Tue/Thu fires (nothing new registers; the gates it waited on — the Stage D kinds split and Stage E counterparty receipts — are merged). It rescues the "you nudged, they went quiet" set: items the user already chased that the daily filters have stopped surfacing.
+
+**Run only when the fire's machine-local weekday is Tuesday or Thursday.** On other days, skip this phase entirely — no section, no mention.
+
+**Qualification (substrate-only — no connector fetch in this phase):** an OWED TO YOU item from Phase 3's set qualifies when ALL hold:
+1. Effective `data.kind != "task"` (same Stage D filter as everything above) and the item is still open after the 2.5/2.6/2.7 pre-render scans. Still-open is the no-reply proxy: if the counterparty had replied or delivered, the inbound leg (Phase 2.6, cumulative across every prior weekday fire) or a `mark received` would have closed it or queued a review proposal.
+2. A prior outbound touch exists: an `outreach_sent` event whose `source_skill` normalizes to `commitments` (via `source_skill_compat.normalize_source_skill`) targeting this commitment_id — OR a `sent_reconcile`-attributed outbound naming its counterparty (Stage E `data.counterparty_id` / `counterparty_name` receipts identify the counterparty; skip items with no resolvable counterparty).
+3. That latest outbound touch is ≥ 3 weekdays old (machine-local, same clock as Phase 2.9).
+4. The item is NOT already rendering as an actionable row in today's OWED TO YOU sections (no double-surfacing — WAITING ON exists for the quiet tail, not to echo the main list), and no `chat_dismissal` for it is live.
+
+**Render:** one extra section after OWED TO YOU, title `⏳ WAITING ON — nudged, no reply`, cap 5 (oldest outbound first; the rest ride the next Tue/Thu fire). Each item: title + counterparty + one plain-English age line ("you nudged Sam last Tuesday — nothing back"). Actions reuse the standard OWED TO YOU cluster verbatim — `send` / `edit then send` / `draft` on a pre-staged nudge email + `mark received` + `skip` — NO new verbs (`CANONICAL_ACTIONS` untouched; apply-choices dispatches these through the existing commitments handlers on this orchestrator's `src`).
+
+**The nudge draft** goes through email-writer's lazy-draft path exactly like Phase 7's chase drafts, with the Phase 5 severity tier bumped one level (a re-nudge is never `friendly`), and the repeat-chase suppression in Phase 5 applies unchanged — a WAITING ON send writes the same `outreach_sent` receipt, which resets this phase's 3-weekday clock.
+
+**Counts:** WAITING ON items are already inside `count_commitments`' totals (they're open owed-to-you items) — the section changes SURFACING only; never add them to the header numbers twice.
 
 # Phase 4 — Group by recipient (OWED TO YOU only)
 
@@ -380,7 +501,7 @@ Within OWED TO YOU, if a single owner owes multiple things in the same bucket, m
 | 8-30 days | **firmer** | Timing-alignment, no blame. "Touching base on X timing. Looking to align on a revised ETA." |
 | 30+ days | **status check** | Formal request. "Status check on X — want to align on where this stands." |
 
-Pass tier to email-writer as voice directive. Repeat-chase escalation: scan events.jsonl for prior `outreach_sent` with `source_skill: cr-commitments` (or legacy `cr-commitment-chase`) targeting same commitment_id within last 14 days. If found → bump tier up one level. Prevents identical chase repetition when nothing's moving.
+Pass tier to email-writer as voice directive. Repeat-chase escalation: scan events.jsonl for prior `outreach_sent` whose `source_skill` normalizes to `commitments` (via `source_skill_compat.normalize_source_skill` — matches the bare `commitments` form AND legacy `cr-commitments` / `cr-commitment-chase` history in workspaces that predate the v2.14.27 rename) targeting same commitment_id within last 14 days. If found → bump tier up one level. Prevents identical chase repetition when nothing's moving.
 
 YOU OWE direction has no tier — voice tilt is fixed: "confident + concrete + brief — minimal apology, no grovel, focus on the path forward."
 
@@ -403,9 +524,22 @@ For each external OWED TO YOU (or grouped): run `email-writer` with the tier voi
 
 Append to events.jsonl:
 - `connector_read` for events.jsonl scan
-- One `pack_run` event with kind: commitments, date, status, items_drafted_text per direction, errors, duration_ms, **telemetry** (v2.14.0+)
+- The fire receipt — **ONE call to the canonical receipt helper (`shared/scripts/receipts.py`, v4.5.2 R1). NEVER hand-roll the receipt JSON** — this exact skill wrote two different receipt shapes in one day during the dogfood (`{task_id: 'cr-commitments', fired_at, outcome}` in the morning, `{kind, date, status, late_tier}` in the afternoon — FINDINGS F-47 P2a):
 
-**Telemetry capture (v2.14.0+ Phase 1):** Build the telemetry block via `shared/scripts/telemetry.py` `build_pack_run_telemetry()` (same pattern as orchestrator-inbox.md Phase 7). Track connector calls + prompt/response sizes + duration. Merge into `pack_run.data` as `telemetry: {...}`. Silent — never narrated to chat.
+```python
+from receipts import log_receipt
+log_receipt(
+    WORKSPACE_ROOT, "commitments",
+    fired_via=lateness["receipt_fired_via"],  # from Phase 2.9 — manual | scheduled | catchup; never guess it
+    surfaced=n_surfaced,
+    duration_ms=elapsed_ms,
+    late_tier=lateness["tier"] if lateness["tier"] in ("note", "degrade") else None,
+    extra_data={"items_drafted_text": {...per direction...}, "errors": [],
+                "telemetry": {...}},
+)
+```
+
+**Telemetry capture (v2.14.0+ Phase 1):** Build the telemetry block via `shared/scripts/telemetry.py` `build_pack_run_telemetry()` (same pattern as orchestrator-inbox.md Phase 7). Track connector calls + prompt/response sizes + duration. Pass it through `extra_data` as `telemetry: {...}`. Silent — never narrated to chat.
 
 NO `draft_created` events at fire time (lazy creation). Append to staging_emissions.jsonl per item drafted.
 
@@ -456,10 +590,17 @@ data_view = {
     "header": "Commitments — nothing needs your attention this morning",
     "sub_header": f"{day_full}, {month_short} {day_num} · {fire_time} check",
     "counters": [
+        # v4.5.2 R4: values verbatim from counts["headline"] (n_open_total =
+        # headline["total"], directions = headline["you_owe"]/["owed_to_you"]).
+        # Unowned/unconfirmed items are in Open total but neither direction —
+        # never fold them into Owed to you.
         {"label": "Open total", "value": n_open_total},
         {"label": "You owe", "value": n_you_owe},
         {"label": "Owed to you", "value": n_owed_to_you},
         {"label": "Needing action", "value": n_needing_action},  # MUST include B-unreachable items per the v2.14.19 reachability rule above
+        # v4.6.0 MC2: append {"label": "Stuck", "value": n_stuck} ONLY when
+        # headline carries the key and it is > 0 — an all-clear morning with
+        # stuck items should still show the honest number.
     ],
     "summary_line": "Nothing overdue, nothing due in the next 3 days, and nothing has been sitting open long enough to be aging. The N things on the books were either recently captured or have downstream dates further out.",
     "tracked_items": [
@@ -512,7 +653,13 @@ if you_owe_buckets:
 
 data_view = {
     "widget_mode": "all_batch_widget",
-    "header": f"Commitments — {n_total} total open · {n_owed_to_you} owed to you · {n_you_owe} you owe",  # v2.14.38+ order matches section order: owed to you first
+    "source_skill": "commitments",  # W4 (Phase 3) — stamped into every Apply-all tuple as src; apply-choices dispatches on it statelessly (no 60-min fire-marker window)
+    # v4.5.2 R4 + v4.6.0 MC2: all numbers verbatim from counts["headline"] —
+    # never fold unowned/unconfirmed into a direction. Omit a bucket segment
+    # when it is 0 (never pad); order matches section order: owed to you first
+    # (v2.14.38+). "stuck" is the real movement metric (MC2) — omit the
+    # segment entirely when headline has no stuck key (not computed ≠ 0).
+    "header": f"Commitments — {n_total} total open · {n_owed_to_you} owed to you · {n_you_owe} you owe · {n_unowned} unowned · {n_unconfirmed} unconfirmed · {n_stuck} stuck",
     "sections": sections,
     "quick_read": quick_read,           # 1-3 sentences when N>2 and clustering signal exists
 }
@@ -530,6 +677,28 @@ validate_rendered_widget(html)  # raises WrapperContractError on bypass
 ```
 
 The widget posts via `mcp__visualize__show_widget` instead of being a chat string. User clicks per-item buttons to select actions; widget batches selections and fires one consolidated `apply choices: [...]` payload on Apply all. The `apply-choices` skill catches that payload and dispatches each `{n, action}` through the reply handlers below. See `shared/CHAT_ACTION_WIDGET.md` for full widget behavior, `skills/apply-choices/SKILL.md` for the receiving end.
+
+**First-Run Personalization (SPEC FRP1) — the commitments surface's two knobs.** This orchestrator
+reads its presentation knobs via `get_config(WORKSPACE, "commitments", DEFAULTS)` where:
+
+```python
+DEFAULTS = {
+    "group_by": "person",      # person (group OWED-TO-YOU by recipient) | project
+    "chase_tone": "friendly",  # friendly | direct (the YOU-OWE draft tone in Phase 7)
+}
+```
+
+`group_by` drives the Phase 4 grouping; `chase_tone` sets the Phase 7 draft register. On the FIRST
+fire only (`not is_configured(WORKSPACE, "commitments")`): `save_skill_config(WORKSPACE,
+"commitments", DEFAULTS)` BEFORE rendering, then append a **"Make this yours"** section at the
+BOTTOM of `sections` carrying two fr-items — `fr1` group-by (person/project) and `fr2` chase-tone
+(friendly/direct) — each rendered as the documented current-state fixed-option row (the fr-item
+preselect exception in `shared/CHAT_ACTION_WIDGET.md`). A tap emits `{n:"fr1", action, sub?}` →
+apply-choices routes it to `save_skill_config(WORKSPACE, "commitments", cfg, is_reconfigure=True,
+origin="first_fire_override")`. The "Make this yours" section renders exactly once ever
+(`is_configured` gate). This is the orchestrator fr-item transport (no second surface — resolves
+MUST-NOT rule 5). Freeform tune ("group by project" / "chase people more directly") maps to the
+same two keys. Cadence/timing of this scheduled fire is `change-schedule`, not tune.
 
 **Step 3 — Post the chat-links section (v2.12.0+):**
 
@@ -785,7 +954,7 @@ Parse `N action` (with or without period). Dispatch by direction:
 - `N draft` (v2.14.4+ consolidated verb; `input` field carries the multi-field edit) → replace `body_lines` (and any edited To/Cc/Subject) with the user's edited input verbatim, then lazy-create the Gmail/Outlook draft. Single round. (Pre-v2.14.4 this was two separate verbs `to drafts` + `edit then draft` — consolidated; the renderer rejects the legacy forms.)
 - (Removed v2.12.2: standalone `N edit`. Combined edit+disposition replaces it. Pre-v2.12.0 `N edit [change]` directive flow also gone.)
 - `N push to [date]` → parse date, validate future. Write `commitment_updated` event with `data: {commitment_id, new_due, reason: "user push"}`. Update draft to mention new date. Stage updated draft. Ask `send / keep`. (Canonical type is `commitment_updated` per `events.schema.json` — same type the CRU schedule-shift path emits via `build_commitment_updated_event`; the timeline `type_label` map renders it as "Updated".)
-- `N resolved` → write `commitment_resolved` event with note "user marked complete via cr-commitments." Confirm `✓ Resolved: [title].` (Renamed v2.12.3 from `N close`. v2.14.38+ also handles Self-commitment resolution — same verb across all surfaces.)
+- `N resolved` → close through `commitment_state.close_commitment(workspace_root, <item's data.id verbatim>, resolved_by=<user person_id>, evidence="user marked complete via the Commitments task", source_skill="commitments", user_confirmed=True)` (Stage B 2026-07 — THE closure path; never hand-build a `commitment_resolved` append. Normalizes legacy ids, refuses no-match ids loudly, idempotent over the full resolved-id set). Confirm `✓ Resolved: [title].` (Renamed v2.12.3 from `N close`. v2.14.38+ also handles Self-commitment resolution — same verb across all surfaces.)
 - `N snooze 3d` (v2.14.38+) → write `chat_dismissal` with `data.snooze_until: <today + 3d>`. Item suppressed in commitments until the date passes. Confirm: `✓ Snoozed [title] for 3 days.` only if mentioned.
 - `N add to my list` (v2.14.38+) → write `commitment_to_discuss` event with `data.source_event_seq` pointing back to the originating commitment. Surfaces later via the `show my list` skill, grouped by counterparty. Confirm: `✓ Added [title] to your discuss list.` only if mentioned.
 
@@ -795,8 +964,8 @@ Parse `N action` (with or without period). Dispatch by direction:
 - `N edit then send` (v2.12.2+) → replace body with input, then send via `N send` handler.
 - `N draft` (consolidated v2.14.4+) → widget exposes textarea pre-populated; user edits; Apply saves to Gmail Drafts.
 - `N follow-up call` → drafts a calendar-invite request via email-writer ("Quick 15 min sometime this week?"). If Calendar MCP supports tentative invite, create that too. Stage email draft.
-- `N mark received` (singleton) → write `thread_resolved` for this commitment id. Confirm.
-- `N mark received all` (grouped) → write `thread_resolved` for all sub-items. Suppress the parent.
+- `N mark received` (singleton) → close through `commitment_state.close_commitment(workspace_root, <item's data.id verbatim>, resolved_by=<user person_id>, evidence="counterparty delivered — marked received", source_skill="commitments", user_confirmed=True)` (Stage B — supersedes the bare `thread_resolved` write; the canonical `commitment_resolved` shape is what every consumer's closure filter reads first). Confirm. If it returns `already_resolved`, write NOTHING and say so plainly ("that one was already marked received earlier") — never append a second closure (v4.5.2 R1c).
+- `N mark received all` (grouped) → same close_commitment call per sub-item (batch via `commitment_state.close_commitments`). Suppress the parent.
 - `N escalate to memo` → fire memo-writer through standard chat invocation. Memo-writer produces .docx via the docx skill and surfaces the link the standard Cowork way. Do NOT emit `file://` links yourself. Re-prompt in plain English: "Want to send this as the email body, attach it to the reply, or send it standalone?"
 - `N snooze 3d` (v2.14.38+) → same as YOU OWE — `chat_dismissal` with 3-day TTL.
 - `N add to my list` (v2.14.38+) → same as YOU OWE — `commitment_to_discuss` event grouped by counterparty.
@@ -808,6 +977,16 @@ For `7a`, `7b`, `7c` style sub-items inside a grouped chase email:
 - `Na mark received` → write `thread_resolved` for that specific commitment id. Update parent's chase draft to drop the now-received item.
 - `Na not relevant` → write `chat_dismissal` with `data.target_id: <sub-commitment-id>`, `data.reason: "not_relevant"`, 60-day TTL. Sub-commitment suppressed for 60 days; parent stays open if other sub-items remain.
 - `Na add to my list` → write `commitment_to_discuss` for that sub-commitment. Surfaces later via `show my list` grouped by counterparty.
+
+## Lifecycle corrections (v4.6.0 S4 — typed chat phrases, both directions)
+
+Three correction verbs for captures that landed WRONG, all registered in `verb_taxonomy` and dispatched through `commitment_state` (apply-choices § commitment-triage documents the exact calls — same handlers here):
+
+- `N fix wording: <text>` / "that should say <text>" → `commitment_state.edit_commitment_wording(workspace_root, <item's data.id verbatim>, new_summary=<text>, edited_by=<user person_id>, source_skill="commitments")`. The item re-renders with the corrected text on every surface; the original stays in history. Confirm with the corrected line, e.g. `✓ Fixed — "send Michele the positioning brief".`
+- `N reassign to [name]` / "that's actually [name]'s" → resolve the name via the standard entity path (ambiguous → ask in one line, never guess), then `commitment_state.reassign_commitment(workspace_root, <id>, new_owner_id=<resolved person_id>, new_owner_name=<display name>, reassigned_by=<user person_id>, reason="user reassigned", source_skill="commitments", confirmed=True)`. The item leaves the user's you-owe and lands on the named owner — `not mine` DISCARDS, reassign ROUTES. Confirm: `✓ Routed to [name] — off your list.` (Unconfirmed/inferred reassignments — never from a typed name — stay in the unconfirmed bucket and are NEVER chased; no auto-email on a guessed owner.)
+- `N split into: A / B / C` (2+ parts, separated by newlines / semicolons / " / ") → `commitment_state.split_commitment(workspace_root, <id>, [{"title": ...}, ...], split_by=<user person_id>, source_skill="commitments", user_confirmed=True)`. Each part becomes its own commitment carrying the original's provenance; the original closes with a "split into …" note. Confirm by naming the N new items. Extraction pre-split stays the doctrine (M decision 2026-07-09) — this is the manual correction path, never an extraction substitute.
+
+"show muted" / "show snoozed" in this chat → the mute ledger (show-my-list's ledger mode): every live snooze with its remaining time and an Unmute action.
 
 ## Bulk actions (canonical set only — v2.14.19+ retired non-canonical "show all open" / "show all overdue" navigation buttons)
 
