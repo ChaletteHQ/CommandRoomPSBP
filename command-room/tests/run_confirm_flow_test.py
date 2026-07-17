@@ -102,7 +102,7 @@ def make_workspace(events: list[dict]) -> Path:
         "people": [
             {"id": "person_001", "canonical_name": "Mira Sample",
              "first_seen": "2026-01-01"},
-            {"id": "person_009", "canonical_name": "Erick Stone",
+            {"id": "person_009", "canonical_name": "Dustin Stone",
              "first_seen": "2026-01-01"},
         ],
     }), encoding="utf-8")
@@ -138,7 +138,7 @@ FIXTURE = [
     # owner_person_id-variant shape, confirmed, 1h ago — OUT (no amber class)
     {"seq": 5, "ts": iso(hours_ago=1), "type": "commitment", "source_skill": "past-meetings",
      "data": {"id": "cmt_variant", "title": "book the venue", "state": "open",
-              "owner_person_id": "user_1", "due_date": "2026-07-15"}},
+              "owner_person_id": "user_1", "due_date": "2026-07-15"}},  # DATE_GUARD_OK: widget payload shape; suite clock is pinned via NOW
     # pending_review, captured 26h ago — IN since S3 widened the window to the
     # 7-day pin (this row was the W4b gap: old enough to leave the 24h section,
     # too young for the pin — it surfaced nowhere)
@@ -160,7 +160,7 @@ FIXTURE = [
     {"seq": 10, "ts": iso(days_ago=2), "type": "commitment", "source_skill": "meeting-notes",
      "data": {"id": "cmt_task_cp", "title": "draft the pricing note", "status": "open",
               "kind": "task", "owner_id": "user_1",
-              "counterparty_id": "person_009", "counterparty_name": "Erick Stone"}},
+              "counterparty_id": "person_009", "counterparty_name": "Dustin Stone"}},
     # task with NO counterparty — never proposed
     {"seq": 11, "ts": iso(days_ago=2), "type": "commitment", "source_skill": "meeting-notes",
      "data": {"id": "cmt_task_bare", "title": "tidy the tracker", "status": "open",
@@ -168,7 +168,7 @@ FIXTURE = [
     # person proposals: one open, one adjudicated
     {"seq": 12, "ts": iso(days_ago=9), "type": "person_proposal", "source_skill": "meeting-notes",
      "data": {"name": "Myra Samples", "pending_review": True,
-              "source_ref": "granola:xyz", "inferred_org": "Jewett Co"}},
+              "source_ref": "granola:xyz", "inferred_org": "Acme Co"}},
     {"seq": 13, "ts": iso(days_ago=9), "type": "person_proposal", "source_skill": "meeting-notes",
      "data": {"name": "Rick Passerby", "pending_review": True, "source_ref": "granola:xyz"}},
     {"seq": 14, "ts": iso(days_ago=8), "type": "person_proposal_resolved",
@@ -244,7 +244,7 @@ def main() -> int:
     # Theirs → [name]: S4 reassign with confirmed=True
     r = reassign_commitment(ws, "cmt_unowned", reassigned_by="user_1",
                             source_skill="commitments", new_owner_id="person_009",
-                            new_owner_name="Erick Stone",
+                            new_owner_name="Dustin Stone",
                             reason="confirmed: theirs", confirmed=True)
     check("Theirs returns reassigned via commitment_reassigned",
           r["status"] == "reassigned" and r["event"]["type"] == "commitment_reassigned"

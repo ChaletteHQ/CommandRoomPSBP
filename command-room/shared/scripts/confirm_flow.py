@@ -97,6 +97,30 @@ ESCALATION_DROP_DAYS = 30
 PROPOSAL_TYPES = ("person_proposal", "person_update_proposal")
 PROPOSAL_RESOLUTIONS = ("person_added", "same_as", "not_relevant")
 
+# FB-8 (T3) — LEGACY person proposals (older skill versions + freelance
+# writers) carry the as-heard fields under several spellings; only the
+# current builder writes `name`. On the live substrate the dominant name
+# carriers are `inferred_name` and `proposed_name` (plus one `display_name`)
+# — reading `name` alone rendered EVERY legacy identity row nameless. The
+# reader coalesces first-non-empty so no consumer ever sees a nameless row
+# when the event carried a name. Order: current shape first, then the
+# legacy spellings by observed frequency.
+PERSON_NAME_KEYS = ("name", "inferred_name", "proposed_name", "display_name")
+PERSON_ROLE_KEYS = ("inferred_role", "proposed_role", "role")
+PERSON_ORG_KEYS = ("inferred_org", "proposed_org", "inferred_org_name",
+                   "proposed_org_name", "proposed_org_canonical_name",
+                   "org_hint")
+PERSON_EVIDENCE_KEYS = ("evidence", "signal", "note", "context", "reason")
+
+
+def _first_str(data: dict, keys) -> Optional[str]:
+    """First non-empty string value across the legacy field spellings."""
+    for k in keys:
+        v = data.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return None
+
 
 # -----------------------------------------------------------------------------
 # The three amber classes
@@ -322,6 +346,12 @@ def load_open_person_proposals(
     Returns rows oldest first:
       {seq, type, name, person_id, inferred_role, inferred_org, evidence,
        review_reason, source_ref, captured_ts}
+
+    name / inferred_role / inferred_org / evidence / source_ref are
+    COALESCED across the legacy field spellings (PERSON_*_KEYS — FB-8): the
+    live substrate carries `inferred_name` / `proposed_name` / `display_name`
+    rows written by older skill versions, and reading `name` alone rendered
+    every one of them as a nameless identity row.
     """
     path = Path(events_jsonl_path)
     if not path.exists():
@@ -332,12 +362,18 @@ def load_open_person_proposals(
     for ev in events:
         et = ev.get("type") or ""
         d = ev.get("data") or {}
-        if et == "person_proposal_resolved":
+        if et in ("person_proposal_resolved", "person_proposal_reopened"):
             ps = d.get("proposal_seq")
             if isinstance(ps, str) and ps.strip().isdigit():
                 ps = int(ps.strip())
             if isinstance(ps, int) and not isinstance(ps, bool):
-                resolved_seqs.add(ps)
+                # T2.2 (backlog-sweep undo): a later person_proposal_reopened
+                # lifts the tombstone — events are in seq order, so the last
+                # writer wins; a re-resolve after a reopen re-tombstones.
+                if et == "person_proposal_resolved":
+                    resolved_seqs.add(ps)
+                else:
+                    resolved_seqs.discard(ps)
         elif et in PROPOSAL_TYPES:
             proposals.append(ev)
     dismissed = set(dismissed_target_ids or ())
@@ -349,16 +385,24 @@ def load_open_person_proposals(
         if str(seq) in dismissed:
             continue
         d = ev.get("data") or {}
+        # FB-8: coalesce across the legacy field spellings — the as-heard
+        # name is load-bearing downstream ("{name — badge · evidence ·
+        # consequence}"); `source_refs` (list) is the plural legacy spelling.
+        source_ref = _first_str(d, ("source_ref", "source"))
+        if not source_ref:
+            refs = d.get("source_refs")
+            if isinstance(refs, list) and refs and isinstance(refs[0], str):
+                source_ref = refs[0].strip() or None
         out.append({
             "seq": seq,
             "type": ev.get("type"),
-            "name": d.get("name"),
+            "name": _first_str(d, PERSON_NAME_KEYS),
             "person_id": d.get("person_id"),
-            "inferred_role": d.get("inferred_role"),
-            "inferred_org": d.get("inferred_org"),
-            "evidence": d.get("evidence"),
+            "inferred_role": _first_str(d, PERSON_ROLE_KEYS),
+            "inferred_org": _first_str(d, PERSON_ORG_KEYS),
+            "evidence": _first_str(d, PERSON_EVIDENCE_KEYS),
             "review_reason": d.get("review_reason"),
-            "source_ref": d.get("source_ref"),
+            "source_ref": source_ref,
             "captured_ts": (ev.get("ts") or ev.get("timestamp") or ""),
         })
     out.sort(key=lambda r: r["captured_ts"])
@@ -436,6 +480,10 @@ __all__ = [
     "ESCALATION_DROP_DAYS",
     "PROPOSAL_TYPES",
     "PROPOSAL_RESOLUTIONS",
+    "PERSON_NAME_KEYS",
+    "PERSON_ROLE_KEYS",
+    "PERSON_ORG_KEYS",
+    "PERSON_EVIDENCE_KEYS",
     "unconfirmed_classes",
     "is_unconfirmed",
     "select_confirm_items",

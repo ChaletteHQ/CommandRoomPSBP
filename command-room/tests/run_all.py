@@ -27,7 +27,15 @@ TIERS (run in this order; --tier <name> runs just one)
            structurally cannot (per feedback_static_analysis_vs_runtime_exercise).
 
 Each test file is run as its own subprocess; a non-zero exit = fail (house
-convention, see any run_*_test.py). stdlib only, no external deps.
+convention, see any run_*_test.py).
+
+DEPENDENCIES: `pip install -r requirements.txt` (repo root) before running.
+The battery is stdlib-only EXCEPT for pyyaml, tzdata and jsonschema. That claim
+used to read "stdlib only, no external deps", which was untrue and cost real
+debugging time: two suites responded to a missing dependency by printing SKIP
+and exiting 0, so the battery reported green while those checks silently did not
+run. Both now fail loudly. If you add a suite with a third-party import, declare
+it in requirements.txt and make the absence loud.
 
 USAGE
   python tests/run_all.py                 # full battery, all tiers
