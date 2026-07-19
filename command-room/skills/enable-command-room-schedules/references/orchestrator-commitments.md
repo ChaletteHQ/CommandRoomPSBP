@@ -434,7 +434,7 @@ from mute_ledger import active_dismissal_target_ids
 dismissed = active_dismissal_target_ids(<all events>, "<now ISO>")
 confirm_rows = select_confirm_items(opens, "<now ISO>", dismissed_ids=dismissed)
 promo_rows   = select_promotion_proposals(opens, dismissed_ids=dismissed)
-person_rows  = load_open_person_proposals(events_path, dismissed_target_ids=dismissed)
+person_rows  = load_open_person_proposals(events_path, dismissed_target_ids=dismissed, suppress_on_file=True)  # FS-19: already-a-contact rows never surface
 ```
 
 `opens` is the SAME projected set Phase 3 already loaded — no second read. Three row classes, each with its verb cluster (display labels from `verb_taxonomy` — never restate them):

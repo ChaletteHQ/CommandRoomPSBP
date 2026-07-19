@@ -1,6 +1,47 @@
 # Command Room — Changelog
 
-## Unreleased — out5-premium-html branch (SPEC OUT5 — premium HTML as a client-selectable format)
+## v4.9.0 — 2026-07-18 — The consolidation release (v4.7→v4.9 scale): connector-agnostic core, widget transport + density, hardening train, read-only brief + staff-meeting cadence, premium HTML
+
+Everything staged since the v4.6.3 client promote (2026-07-10) — 138 commits — reviewed branch-by-branch (second-eyes on every merge), live-verified in Cowork (2026-07-16 narrowed re-check 8/8; 2026-07-18 verification fires passed post-merge), and shipped as one large minor bump from 4.8.1. Release commit cut on main `86acea8`. Battery 238/0 at the release tip; all five structural guards green; triggers 362/362.
+
+### New capability
+- **Connector-agnostic core (v4.7.x)** — the plugin no longer assumes a fixed connector set; per-workspace backends resolve at runtime.
+- **LB1 Living Brain**, **PIPE1 Part 1 deal tracking** (pipeline-tracker skill, `deal_state.py` sole writer), **MAINT1 maintenance dispatcher** (five silent tasks → one, with a catch-up ledger), **HYG1/HYG2 hygiene bundles** (partial-delivery tracking, 30d low-context age-out, loud task-failure reporting; F-05/F-11/F13-partial/F-04 integration fixes).
+- **OUT5 premium-HTML deliverable format** — client-selectable via `tune output`; one gate stack, two backends; G16 render-integrity guard (detail below).
+- **OUT6 board-pack .pptx** — real slide grammar + `deck_writer.make_deck` chokepoint.
+- **OUT8 exemplar library** — structural gold standards for all 11 STANDARD_KINDS, three-layer scrub on promote.
+
+### Behavior changes
+- **FB-20: the morning brief is read-only** — prose digest, widget banned, T3.2 pins inverted; the **Staff Meeting becomes the adjudication surface** and moves to an **M/W/F cadence**; FB-19 adds the hold verb and selection fixes.
+- **T2/T2.1/T2.2 widget transport + density** — scaffold diet to 16.3KB, dropdown verbs, byte-budget binary-search fit: 12 heavy rows/page vs 5 before; one-command surface drivers; FS-17 person-row enrichment + 30d TTL; FS-18 handler-truth audit + shared `org_deal_coverage` predicate.
+- **FS-19 (v4.8.1): contacts already on file stop re-surfacing as "add person" rows** — loader-level `suppress_on_file`, all render surfaces filter identically.
+
+### Fixes
+- **T3 fix bundle** — the 2026-07-16 live re-verify findings FB-1..FB-12.
+- **T3.1** — brain-card leak-scanner false refusal on wire ids in data-* attributes (+ IGNORECASE on leak patterns).
+- **T3.2 (FB-18)** — morning-brief relay skip: driver runs LAST, card posts before the digest, receipt gate.
+- **EW2+T** — email-writer mid-turn bypass fixes.
+- **res1** residuals bundle; **rsr1** research routing + connector-reach fix (research render now mechanical through the full gate stack); **fossil-readers** follow-through (recency unified on thread_activity); **FS-15** loud-corruption read-time alarms; **#36** Windows battery-runner UTF-8 pin (closed the fake CI reds).
+
+### Guards
+- **G14** date-bomb (no hardcoded today-or-future dates in fixtures), **G15** marketplace validity (ASCII-only index paths, description caps), **G16** gate parity across docx/HTML backends.
+- **G11** catalog budget raised 48,000 → 53,000 per M's Option B ruling (catalog at 46,566 post-trim).
+
+### Customer migration impact
+Manifest `shared/releases/v4.9.0.json` ships alongside the untouched v4.7.0–v4.8.1 manifests; the update-bridge walks all of them for clients coming from v4.6.3. One user action: `set up command room schedules` to adopt the M/W/F staff-meeting cadence and consolidated maintenance task. Everything else surfaces on the next scheduled fire.
+
+### Release record / CI
+- Local battery **238/0** at `86acea8` — the release gate.
+- GitHub CI py3.12 battery **GREEN** (first green — the historic red was the Windows encoding wall, fixed in #36).
+- GitHub CI py3.11: **one known real failure** — G14 guard exception-type difference between 3.11/3.12 tokenize; fix queued for the next bundle. Local battery is the gate per M's ruling; the py3.11 job does not block this release.
+- The page-3 leak-validator refusal seen in the 2026-07-18 verification fire was the guard working correctly on a workspace data defect, not a code regression — logged for the fix bundle.
+
+### What's NOT in this ship
+`sub1-subitems`, `out3-charts`, and `hist1-entity-history` ride the post-promote train. PIPE1 Part 2 (sent-proposal detector), OUT5 §3e export-bridge affordance, and the FS-19 first-name cooldown remain queued.
+
+### Shipped in v4.9.0 — detailed branch entries below
+
+## v4.9.0 detail — out5-premium-html branch (SPEC OUT5 — premium HTML as a client-selectable format)
 
 The research skill's premium HTML brief, generalized into a shared format any launched kind can render to — selected per client via the output profile behind the existing `tune output` verb. Zero new skills, zero new triggers, zero description bytes (G11 untouched). Built off main `06d6d69`. No version bump; header assigned at ship.
 
@@ -14,7 +55,7 @@ The research skill's premium HTML brief, generalized into a shared format any la
 - **Deferred to FUTURE_WORK:** §3e export-bridge affordance ("export this as a brief" from weekly-recap / morning-briefing widgets) — deferred rather than risk the widget action registry surface; the spec allows this explicitly.
 - Tests: new `run_premium_html_test.py` (59 checks) + G16 guard; `run_output_profile_test.py` schema pin updated to the 5 knobs; stray-palette allowlist entry moved to `premium_brief.html` (16 hits — the brand accent is no longer hardcoded).
 
-## Unreleased — hyg2 branch (SPEC HYG2 — integration-cycle queued fixes: F-05, F-11, F13-partial, F-04)
+## v4.9.0 detail — hyg2 branch (SPEC HYG2 — integration-cycle queued fixes: F-05, F-11, F13-partial, F-04)
 
 Four queued findings from the integration-2026-07 cycle (`FINDINGS_M_integration_2026-07.md`), built off v4.8.0 staging (`a6b9df1`). No new event types, no description/frontmatter edits (G11 untouched), zero collision with the EW2+T surface (CHAT_ACTION_WIDGET, email-writer, apply-choices, workspace-manager all untouched). Version header assigned at ship.
 
@@ -22,6 +63,28 @@ Four queued findings from the integration-2026-07 cycle (`FINDINGS_M_integration
 - **F-11 — stale writer-lock litter root-caused + release path hardened.** The seven `entities.json.lock.stale.*` files from one multi-write session were NOT crashed writers — they were mv-aside litter: on a Drive-synced workspace the sync client transiently holds each fresh lock sentinel, the release-time unlink gets OSError-refused, and the old code renamed immediately (one `.stale` file per write in a burst). New `atomic_write._clear_lock_file`: unlink with brief retries first, mv-aside only as the backstop; `acquire_write_lock`'s stale-RECLAIM now goes through it too (a refused unlink there used to CRASH the acquiring writer; an unclearable lock now times out instead of spinning). The weekly sweep half of F-11 already shipped in HYG1 (cleanup Rule 9 / `sweep_stale_locks`) — unchanged. Timeout/contention settings reviewed and kept (takeover worked as designed). Second-eyes hardening: `multi_write_context`'s two reclaim branches get the same unclearable-lock → timeout contract. New `run_stale_lock_f11_test.py` (7 checks, incl. the end-to-end litter→sweep chain).
 - **F13 (partial) — add-person elicit path names the existing same-name people.** New `people_writer.list_same_name_people()` — deterministic token-level scan (canonical_name + aliases + nicknames, archived excluded) that produces the list neither `find_existing_person` (exact tiers) nor `entity_resolve.resolve_all` (early-returns on first exact hit) can. people-crm SKILL.md gains the explicit elicit-path contract: never silent-create (Bug #19, unchanged) → run BOTH dedup helpers BEFORE rendering the form → the form header MUST name the matches and offer pick-existing (which routes to `update_person`, never create). New `run_same_name_people_f13_test.py` (8 checks, incl. both live workspace shapes and an instruction-layer guard that the SKILL.md references the helpers by name — the F-15 gotcha class).
 - **F-04 — canonical-edit-surface staleness detector precision.** `stale_marker_pending` hits are now classified before acting: actionable (full replacement flow) ONLY when the retired token sits in a path/config context on a line that still directs the reader at the retired location; keyword-only / prose hits (retirement notes, warnings, history) downgrade to a one-line advisory — no confirm item, no replacement block, no migration event. Unsure → advisory, said out loud. Closes the false positive where a well-maintained workspace re-flagged on every bridge run because its docs *documented the retirement*. The migration-registry comments and the trigger gate route through the same classification (second-eyes: no section of the file may re-teach the bare-substring semantics). New `run_bridge_stale_marker_advisory_f04_test.py` (3 checks) pins the load-bearing instruction language.
+
+## v4.8.1 — 2026-07-17 — FS-19: already-on-file people stop re-surfacing as "add person"
+
+A defect fix: the Command Room Staff Meeting — and the morning brief and daily Commitments chat — kept re-proposing "add person" for people already saved as contacts, every week. Built off main `f68ef9d` on branch `fix-person-already-oncontact`, merged `--no-ff`; two independent second-eyes reviews PASS. Battery 238/0, triggers 362/362, confirm_flow 67/0.
+
+### Root cause
+The person-proposal adapter (`_adapt_person_proposals`) never checked whether the proposed person already exists — unlike the org adapter (`_adapt_org_project_proposals`), which drops a row once `find_existing_org` finds it. People got the low-context age-out but never the already-exists check, so a contact already on file re-surfaced forever: rich-context rows never age out (F-46), and "adding" an existing contact returns `needs_confirm`, which leaves the proposal open.
+
+### Fix
+`confirm_flow.person_name_on_file` — the single predicate — suppresses an ADD-type proposal whose name confidently resolves to an existing contact, reusing `find_existing_person` verbatim: full-name (Tier 2) / email (Tier 1) match → suppress; a lone first-name hit raises `MultipleCandidatesError` (Bug #19 discipline — a different same-first-name person is a human call) → keep. `load_open_person_proposals` gained an opt-in `suppress_on_file` flag so every RENDER surface (staff meeting, morning brief, commitments chat) filters identically and their counts agree by construction; the person-backlog sweep keeps the unfiltered default because it must see on-file collisions to hold them for a same-name confirm. Filter-only, no tombstone (mirrors the org path); `person_update_proposal`s are never suppressed (existence is their premise).
+
+### Files touched
+- `shared/scripts/confirm_flow.py` — `person_name_on_file()`, `_workspace_root_from_events_path()`, `suppress_on_file` param on `load_open_person_proposals`
+- `shared/scripts/brain_proposals.py` — adapter reads `suppress_on_file=True` (single chokepoint); `person_proposal_already_on_file` delegates to the shared predicate
+- `skills/morning-briefing/SKILL.md` + `skills/enable-command-room-schedules/references/orchestrator-commitments.md` — the two render/count call sites pass the flag
+- Tests: `run_confirm_flow_test.py` (+10), `run_brain_proposals_test.py` (+8), `run_person_backlog_sweep_test.py` (one obsolete post-sweep assertion updated — the primary-user same-name row is now correctly suppressed; the sweep's own `needs_confirm` behavior is unchanged)
+
+### Customer migration impact
+None. No workspace-file or schema change; no user action required — the next Staff Meeting simply stops showing people already on file. Bare first-name mentions still surface once for a human decision, by design.
+
+### What's NOT in this ship
+The first-name cooldown (damp re-proposing a bare first name once linked/dismissed) — deliberately parked (re-introduces a softer Bug #19 risk). Non-blocking perf follow-up: `find_existing_person` re-reads entities per proposal (fine at current scale; memoize if queues grow).
 
 ## v4.8.0 — 2026-07-13 — The integration release (deal tracking + maintenance consolidation + email delegation + hygiene bundle)
 

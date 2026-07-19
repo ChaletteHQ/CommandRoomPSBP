@@ -469,4 +469,61 @@ check("auto" not in tiers and len(card["items"]) == 1,
 check(any(i.get("tier") == "auto" for i in bp.load_open_proposals(ws)),
       "F5: auto proposal still visible to the projector (feed reads it)")
 
+# --- FS-19: already-a-contact suppression (confident matches only) ---------
+# The person queue's missing symmetry with the org adapter. An "add person"
+# whose name confidently resolves to an existing contact must NOT re-surface
+# (the every-week resurfacing M reported); a lone first-name match stays a
+# human call (Bug #19 discipline — never auto-merge a different same-first).
+ws = _ws()
+# Existing contacts on file: a full-name record and a first-name-shared one.
+ent = json.loads((ws / "_hq" / "data" / "entities.json").read_text(encoding="utf-8"))
+ent["people"] = [
+    {"id": "person_ross", "canonical_name": "Ross Placeholder",
+     "emails": ["ross@example.com"], "status": "active"},
+    {"id": "person_kev", "canonical_name": "Kevin Sample", "status": "active"},
+]
+(ws / "_hq" / "data" / "entities.json").write_text(json.dumps(ent), encoding="utf-8")
+fresh = NOW - timedelta(days=2)
+_raw_append(ws, [
+    # full-name match to person_ross → confident (Tier 2) → SUPPRESSED
+    {"ts": _iso(fresh), "type": "person_proposal", "source_skill": "meeting-notes",
+     "data": {"pending_review": True, "inferred_name": "Ross Placeholder",
+              "role": "advisor", "source": "named again on a later call"}},
+    # lone first name overlapping Kevin Sample → ambiguous (Tier 3) → KEPT
+    {"ts": _iso(fresh), "type": "person_proposal", "source_skill": "meeting-notes",
+     "data": {"pending_review": True, "inferred_name": "Kevin",
+              "role": "vendor", "source": "a different Kevin on a new thread"}},
+    # full name NOT on file → no match → KEPT
+    {"ts": _iso(fresh), "type": "person_proposal", "source_skill": "inbox-triage",
+     "data": {"pending_review": True, "proposed_name": "Dana Newperson",
+              "source": "new sender"}},
+    # update-type referencing an existing person → existence is its premise,
+    # NEVER suppressed (proposes a change to someone you already have)
+    {"ts": _iso(fresh), "type": "person_update_proposal", "source_skill": "people-crm",
+     "data": {"person_id": "person_ross", "proposed_delta": {"role": "director"},
+              "note": "title change spotted in a signature",
+              "source_ref": "mail:thread_9001"}},
+])
+pnames = [i.get("name") for i in bp.load_open_proposals(ws)
+          if i["source_family"] == "person"]
+check("Ross Placeholder" not in pnames,
+      f"FS-19: full-name match to an existing contact is suppressed: {pnames}")
+check("Kevin" in pnames,
+      f"FS-19: lone first-name overlap stays a human call (not suppressed): {pnames}")
+check("Dana Newperson" in pnames,
+      f"FS-19: a genuinely-new full name still surfaces: {pnames}")
+check(any(i.get("person_id") == "person_ross" and i["source_family"] == "person"
+          for i in bp.load_open_proposals(ws)),
+      "FS-19: a person_update_proposal on an existing person is NOT suppressed")
+# The helper itself, exercised directly on the three add-type shapes.
+check(bp.person_proposal_already_on_file(
+    ws, {"type": "person_proposal", "name": "Ross Placeholder"}) is True,
+    "FS-19 helper: confident full-name match → True")
+check(bp.person_proposal_already_on_file(
+    ws, {"type": "person_proposal", "name": "Kevin"}) is False,
+    "FS-19 helper: ambiguous first-name → False (fail-open on Tier 3)")
+check(bp.person_proposal_already_on_file(
+    ws, {"type": "person_update_proposal", "name": "Ross Placeholder"}) is False,
+    "FS-19 helper: update-type is never suppressed")
+
 print(f"OK — {PASS} checks passed")

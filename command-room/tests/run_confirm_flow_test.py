@@ -422,6 +422,58 @@ def main() -> int:
           many == "3 items need a 10-second confirm — they're in your Commitments chat.")
 
     # ------------------------------------------------------------------
+    print("[6] FS-19 — suppress_on_file drops already-a-contact add rows; "
+          "sweep default keeps them; first-name/new/update untouched")
+    # ------------------------------------------------------------------
+    # entities carry person_001 "Mira Sample" + person_009 "Dustin Stone".
+    ws6 = make_workspace([
+        # full-name exact match to person_001 → confident (Tier 2)
+        {"seq": 1, "ts": iso(days_ago=2), "type": "person_proposal",
+         "source_skill": "meeting-notes",
+         "data": {"inferred_name": "Mira Sample", "role": "advisor",
+                  "source": "named again on a later call"}},
+        # lone first name overlapping "Mira Sample" → ambiguous (Tier 3)
+        {"seq": 2, "ts": iso(days_ago=2), "type": "person_proposal",
+         "source_skill": "meeting-notes",
+         "data": {"inferred_name": "Mira", "role": "vendor",
+                  "source": "a different Mira on a new thread"}},
+        # full name NOT on file → no match
+        {"seq": 3, "ts": iso(days_ago=2), "type": "person_proposal",
+         "source_skill": "inbox-triage",
+         "data": {"proposed_name": "Dana Newperson", "source": "new sender"}},
+        # update-type referencing an existing person → never suppressed
+        {"seq": 4, "ts": iso(days_ago=2), "type": "person_update_proposal",
+         "source_skill": "people-crm",
+         "data": {"person_id": "person_001",
+                  "proposed_delta": {"role": "director"},
+                  "note": "title change spotted in a signature",
+                  "source_ref": "mail:t9"}},
+    ])
+    ep6 = events_path(ws6)
+    default_names = {p["name"] for p in load_open_person_proposals(ep6)}
+    supp = load_open_person_proposals(ep6, suppress_on_file=True)
+    supp_names = {p["name"] for p in supp}
+    check("default read (sweep posture) keeps the on-file full name",
+          "Mira Sample" in default_names)
+    check("suppress_on_file drops the on-file full name",
+          "Mira Sample" not in supp_names, repr(supp_names))
+    check("suppress_on_file keeps a lone first name (Tier-3 ambiguity)",
+          "Mira" in supp_names)
+    check("suppress_on_file keeps a genuinely-new full name",
+          "Dana Newperson" in supp_names)
+    check("suppress_on_file never drops an update-type proposal",
+          any(p["type"] == "person_update_proposal" for p in supp))
+    from confirm_flow import person_name_on_file
+    check("person_name_on_file: full name → True",
+          person_name_on_file(ws6, "Mira Sample") is True)
+    check("person_name_on_file: lone first name → False (Bug #19)",
+          person_name_on_file(ws6, "Mira") is False)
+    check("person_name_on_file: unknown name → False",
+          person_name_on_file(ws6, "Dana Newperson") is False)
+    check("person_name_on_file: no workspace → False (fail-open)",
+          person_name_on_file(None, "Mira Sample") is False)
+
+    # ------------------------------------------------------------------
     print(f"\n=== Summary: {PASS} passed, {FAIL} failed ===")
     if FAIL:
         return 1

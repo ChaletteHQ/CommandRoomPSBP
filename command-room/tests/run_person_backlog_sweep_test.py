@@ -203,8 +203,16 @@ def main() -> int:
     check("ONE person_backlog_swept audit event",
           text.count('"person_backlog_swept"') == 1)
     rows2 = {i["id"]: i for i in load_open_proposals(ws) if i["kind"] == "person"}
-    check("added rows left the queue; held rows remain",
-          sorted(rows2) == ["person:4", "person:5"], f"got {sorted(rows2)}")
+    # FS-19: the added rows left the queue via their tombstones; person:4
+    # (young low-context "Dana") is genuinely unresolved and remains. person:5
+    # ("Sam Sample") is now ALSO gone — not by the sweep (which still holds it
+    # for a same-name confirm, checked above) but by the FS-19 queue filter:
+    # it is a full-name exact match to the existing primary-user record, so
+    # the "add person" row is suppressed as already-on-file (the every-week
+    # resurfacing this fix kills). The sweep's needs_confirm proposal stays
+    # open in the substrate; it simply never renders.
+    check("added rows left the queue; only the unresolved young row remains",
+          sorted(rows2) == ["person:4"], f"got {sorted(rows2)}")
     ents = json.loads((ws / "_hq" / "data" / "entities.json").read_text(encoding="utf-8"))
     people = ents.get("entities", ents).get("people", [])
     by_name = {p["canonical_name"]: p for p in people}

@@ -327,15 +327,68 @@ def select_promotion_proposals(
 # -----------------------------------------------------------------------------
 
 
+def _workspace_root_from_events_path(events_jsonl_path):
+    """<ws>/_hq/data/events.jsonl → <ws>. Returns None when the path is not in
+    that canonical layout (fail-open: no derivation ⇒ no suppression)."""
+    try:
+        p = Path(events_jsonl_path).resolve()
+        if p.parent.name == "data" and p.parent.parent.name == "_hq":
+            return p.parent.parent.parent
+    except Exception:
+        pass
+    return None
+
+
+def person_name_on_file(workspace_root, name) -> bool:
+    """FS-19 — does `name` confidently resolve to an existing contact?
+
+    Reuses `find_existing_person` verbatim (that resolver is where Bug #19
+    lived — we do NOT re-implement its tiers):
+      - a returned record → full multi-token name exact (Tier 2), or email
+        exact (Tier 1) for a caller that passes one: unambiguously the same
+        person → True.
+      - MultipleCandidatesError → a lone first-name / alias-only hit (Tier 3):
+        DELIBERATELY ambiguous ("Kevin" could be a different, new Kevin) →
+        False; this stays a human decision, never an auto-suppress.
+      - no match → False.
+    Fail-open on any error (show the row rather than silently hide an identity
+    decision). THE one predicate — the loader's suppress_on_file and
+    brain_proposals.person_proposal_already_on_file both route through here so
+    the rule can never fork."""
+    name = (name or "").strip()
+    if not name or workspace_root is None:
+        return False
+    try:
+        from people_writer import MultipleCandidatesError, find_existing_person
+
+        try:
+            return find_existing_person(workspace_root, name=name) is not None
+        except MultipleCandidatesError:
+            return False
+    except Exception:
+        return False
+
+
 def load_open_person_proposals(
     events_jsonl_path,
     *,
     dismissed_target_ids: Optional[Iterable[str]] = None,
+    suppress_on_file: bool = False,
 ) -> list[dict]:
     """Every person_proposal / person_update_proposal event NOT yet
     adjudicated by a person_proposal_resolved tombstone. These re-surface
     daily until adjudicated — no age window, by design (F-46 P2b: a
     proposal must never die with the chat that captured it).
+
+    `suppress_on_file=True` (FS-19) drops an ADD-type proposal
+    (`person_proposal`) whose name confidently resolves to an existing contact
+    — so every RENDER surface reading this loader (staff meeting, morning
+    brief, commitments chat) agrees by construction that an already-on-file
+    person is not a "track them?" row. Opt-in because the person-backlog sweep
+    reads with the default False: it MUST see on-file collisions to hold them
+    for a same-name confirm. `person_update_proposal`s are never suppressed —
+    existence is their premise. The workspace root is derived from the events
+    path's canonical layout; a non-canonical path fails open (no suppression).
 
     Adjudication chain: a person_proposal_resolved whose data.proposal_seq
     matches the proposal's seq retires it permanently (Add person / Same as
@@ -377,6 +430,7 @@ def load_open_person_proposals(
         elif et in PROPOSAL_TYPES:
             proposals.append(ev)
     dismissed = set(dismissed_target_ids or ())
+    ws_root = _workspace_root_from_events_path(path) if suppress_on_file else None
     out: list[dict] = []
     for ev in proposals:
         seq = ev.get("seq")
@@ -388,6 +442,13 @@ def load_open_person_proposals(
         # FB-8: coalesce across the legacy field spellings — the as-heard
         # name is load-bearing downstream ("{name — badge · evidence ·
         # consequence}"); `source_refs` (list) is the plural legacy spelling.
+        name = _first_str(d, PERSON_NAME_KEYS)
+        # FS-19 — already a contact? An ADD-type proposal whose name
+        # confidently resolves to an existing record never surfaces (see
+        # person_name_on_file); update-type rows are exempt.
+        if suppress_on_file and ev.get("type") == "person_proposal" \
+                and person_name_on_file(ws_root, name):
+            continue
         source_ref = _first_str(d, ("source_ref", "source"))
         if not source_ref:
             refs = d.get("source_refs")
@@ -396,7 +457,7 @@ def load_open_person_proposals(
         out.append({
             "seq": seq,
             "type": ev.get("type"),
-            "name": _first_str(d, PERSON_NAME_KEYS),
+            "name": name,
             "person_id": d.get("person_id"),
             "inferred_role": _first_str(d, PERSON_ROLE_KEYS),
             "inferred_org": _first_str(d, PERSON_ORG_KEYS),
@@ -490,6 +551,7 @@ __all__ = [
     "select_unconfirmed_escalation",
     "select_promotion_proposals",
     "load_open_person_proposals",
+    "person_name_on_file",
     "build_person_proposal_resolved_event",
     "confirm_pointer_line",
 ]

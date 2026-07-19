@@ -458,6 +458,36 @@ def person_proposal_is_low_context(p: dict) -> bool:
     return not (p.get("inferred_role") or p.get("inferred_org"))
 
 
+def person_proposal_already_on_file(workspace_root, p: dict) -> bool:
+    """FS-19 — is this "add person" proposal already satisfied by an existing
+    contact? The person queue's missing symmetry with the org adapter
+    (`_adapt_org_project_proposals` drops a proposal once `find_existing_org`
+    finds the org — "already created, the proposal was actioned"). People had
+    the age-out logic but never got the already-exists logic, so anyone
+    already on file re-surfaced as a fresh "add" forever — rich-context rows
+    never age out (F-46), and "adding" someone who already exists returns
+    needs_confirm which LEAVES the proposal open (person_backlog_sweep). That
+    is the every-week resurfacing M reported.
+
+    Only ADD-type proposals (`person_proposal`). A `person_update_proposal`
+    references an existing person on purpose (a new role/email on someone you
+    already have) — those must keep surfacing; existence is their premise, not
+    a reason to drop them.
+
+    THE predicate lives in `confirm_flow.person_name_on_file` (confident
+    matches only: full-name/email → True; lone first-name Tier-3 ambiguity →
+    False, the Bug #19 discipline; fail-open on error). This wrapper adds the
+    add-type gate. The queue adapter no longer calls this directly — it reads
+    `load_open_person_proposals(..., suppress_on_file=True)` so the filter is a
+    single chokepoint shared with the morning brief and the commitments chat.
+    Kept as public API + a direct-unit-test seam."""
+    if p.get("type") != "person_proposal":
+        return False
+    from confirm_flow import person_name_on_file
+
+    return person_name_on_file(workspace_root, p.get("name"))
+
+
 def _person_render_line(p: dict) -> str:
     """FS-17 — the enriched identity row: `{badge} · {source-ref-with-date} ·
     {consequence}`, the same shape the deal rows carry. Provenance-honest:
@@ -517,8 +547,14 @@ def _adapt_person_proposals(workspace_root, events: list[dict],
 
     dismissed = active_dismissal_target_ids(events, _now_iso())
     out = []
+    # FS-19 — already a contact? `suppress_on_file=True` drops an "add person"
+    # row whose name confidently resolves to an existing record (the org
+    # adapter's find_existing_org symmetry), at the SHARED loader so the brief
+    # and commitments chat filter identically. Filter-only, like the org path
+    # — existence recomputes each render, no tombstone.
     for p in load_open_person_proposals(_events_path(workspace_root),
-                                        dismissed_target_ids=dismissed):
+                                        dismissed_target_ids=dismissed,
+                                        suppress_on_file=True):
         if now is not None and person_proposal_is_low_context(p):
             opened = _parse_ts(p.get("captured_ts"))
             if opened is not None and \
@@ -1203,6 +1239,7 @@ __all__ = [
     "BrainProposalError",
     "kind_shape",
     "person_proposal_is_low_context",
+    "person_proposal_already_on_file",
     "PERSON_LOW_CONTEXT_STALE_DAYS",
     "propose",
     "load_open_proposals",

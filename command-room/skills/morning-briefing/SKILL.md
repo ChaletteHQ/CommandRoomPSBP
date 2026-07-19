@@ -444,7 +444,7 @@ from mute_ledger import active_dismissal_target_ids
 dismissed = active_dismissal_target_ids(<all events>, "<now ISO>")
 n_confirm = (len(select_confirm_items(opens, "<now ISO>", dismissed_ids=dismissed))
              + len(select_promotion_proposals(opens, dismissed_ids=dismissed))
-             + len(load_open_person_proposals(events_path, dismissed_target_ids=dismissed)))
+             + len(load_open_person_proposals(events_path, dismissed_target_ids=dismissed, suppress_on_file=True)))  # FS-19: don't count already-on-file people
 pointer = confirm_pointer_line(n_confirm)   # None when the section is empty
 ```
 
