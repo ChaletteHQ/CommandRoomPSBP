@@ -920,6 +920,20 @@ def build_staff_meeting_view(workspace_root, *, now_iso: str | None = None,
             extra.append(fold)
     except Exception as exc:  # pragma: no cover — the fire must survive
         sys.stderr.write(f"[surface_drivers] meeting fold skipped: {exc}\n")
+    # PERSONLOOP1 §0-3 — the person-candidate offer, one capped section from
+    # the SAME builder the on-demand queue and the End of Day read
+    # (`person_candidates.candidate_section`). It sits after the meeting fold
+    # deliberately: the fold is the week's captures, and this is the reason
+    # so many of them are stuck. Drop-empty, and any failure degrades to no
+    # section rather than a dead fire — the same posture as the fold above.
+    try:
+        from person_candidates import candidate_section
+        offer = candidate_section(workspace_root, now_iso=now_iso)
+        if offer:
+            extra.append(offer)
+    except Exception as exc:  # pragma: no cover — the fire must survive
+        sys.stderr.write(f"[surface_drivers] person candidates skipped: "
+                         f"{exc}\n")
     if moves_rows:
         extra.append({"title": "THIS WEEK'S MOVES", "items": list(moves_rows)})
 
@@ -1415,6 +1429,15 @@ def _dup_fold_note(d: dict) -> str | None:
     n = d.get("duplicate_fold_count")
     if isinstance(n, int) and n > 1:
         return f"{n} records — merge?"
+    # INGESTDUP1 D2 — the id-twin collapse. Deliberately NOT worded as a merge
+    # question: these are appends of ONE record, so there is nothing to
+    # adjudicate and nothing for the reader to decide. It is said out loud
+    # anyway, because a projection that quietly drops rows is how a count bug
+    # becomes invisible (and this field is the collapse's only consumer — an
+    # unread stamp is a write-only field).
+    t = d.get("id_twin_count")
+    if isinstance(t, int) and t > 1:
+        return f"written {t} times — counted once"
     return None
 
 
@@ -1471,6 +1494,88 @@ def _last_brief_ts(workspace_root, now_iso: str) -> str:
     return (base - _dt.timedelta(hours=36)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _sent_reconcile_cursor(workspace_root) -> str | None:
+    """The workspace's `sent_reconcile_cursor`, read through the CANONICAL
+    dual-shape accessor (BRIEFSTATE1).
+
+    Why not an inline `entities["workspace"]["sent_reconcile_cursor"]`:
+    entities.json exists in two live shapes — flat (`workspace` at the top
+    level) and nested (`entities.workspace`) — and the reconcile writer
+    (`reconcile_sent_commitments._write_cursor`) maintains whichever shape
+    the file already has. On a workspace whose cursor sits in the INNER
+    block a top-level read returns None, `reconcile_is_stale(None, ...)`
+    returns True, and the brief announces staleness over a cursor that
+    advanced hours ago. `connector_config.workspace_block` is the merged
+    read of both shapes (inner wins on conflict), so this reads back
+    whatever the writer wrote on either shape.
+
+    Precisely how far that agreement goes, since the neighbouring reader is
+    NOT the same read: `_write_cursor` writes into the inner container
+    whenever the `entities` wrapper exists and into the top level otherwise,
+    so this merged reader recovers every shape that writer can PRODUCE.
+    `reconcile_sent_commitments._read_cursor` is inner-if-wrapper with no
+    merge, so on a shape the writer cannot produce — a wrapper workspace
+    carrying an orphan TOP-LEVEL cursor — the two readers disagree: this one
+    returns that value, reconcile-sent's own reader returns None. Reaching
+    that shape takes a hand edit or a shape migration; the divergence is
+    captured for intake rather than papered over here.
+
+    Never raises. An unreadable entities.json degrades to None, which reads
+    as stale — deliberately the conservative direction: soften the item
+    rather than tell the CEO to redo work they may have finished.
+    """
+    try:
+        from connector_config import workspace_block
+
+        cur = workspace_block(workspace_root).get("sent_reconcile_cursor")
+        return cur if isinstance(cur, str) and cur.strip() else None
+    except Exception:
+        return None
+
+
+def _brief_thread_activity(workspace_root) -> dict:
+    """{thread_id: latest-activity ISO} for the 7-day recent-activity drop,
+    from THE canonical derivation (BRIEFSTATE1).
+
+    SEMANTICALLY equivalent to the derivation the hand-driven path
+    documents, by delegation — NOT the same call. `morning-briefing/SKILL.md`
+    Step 3d instructs `derive_from_events(events, activity_types=ALL_TYPES,
+    honor_reclassifications=True)` over the events that fire already holds;
+    this calls `derive_thread_activity(ws, …)` with the same two arguments,
+    which delegates to `derive_from_events` over `_iter_events(ws)` with the
+    same default `confidence_floor`. So the rules are identical — every event
+    type counts (`ALL_TYPES` renderer "last touched" semantics, the 7-day
+    stopgap's original intent), reclassifications folded (RECL1), the 0.40
+    floor applied — while the event SOURCE differs: the full shard-transparent
+    stream here, the fire's already-loaded events there. Immaterial inside a
+    7-day window (shard contents are older than that by construction), and
+    named rather than glossed because the equality is what makes the two
+    fires quote one day-count (the F-54 contract). That equality is pinned in
+    `tests/run_briefstate1_test.py`, not asserted here: a bespoke max(ts)
+    scan, a dropped RECL1 fold or a narrowed type set would each be the C3
+    migration undone, and prose does not stop that.
+
+    `compute_brief_state` reads these values as ISO strings
+    (`_within_recent_window` parses a string); the derivation returns
+    tz-aware datetimes, so the render happens here rather than teaching the
+    state computer a second input shape.
+
+    Never raises. A failed derivation degrades to `{}` — the drop simply
+    does not apply and the item surfaces, which is the safe direction
+    (SKILL.md Step 3d: "pass what you have").
+    """
+    try:
+        from thread_activity import ALL_TYPES, derive_thread_activity
+
+        rows = derive_thread_activity(workspace_root,
+                                      activity_types=ALL_TYPES,
+                                      honor_reclassifications=True)
+        return {tid: act.ts.isoformat() for tid, act in rows.items()
+                if getattr(act, "ts", None) is not None}
+    except Exception:
+        return {}
+
+
 def build_morning_brief_pack(workspace_root, *, mode: str = "scheduled",
                              now_iso: str | None = None) -> dict:
     """t3 FB-9 — the morning brief's mandatory substrate blocks, assembled,
@@ -1502,7 +1607,13 @@ def build_morning_brief_pack(workspace_root, *, mode: str = "scheduled",
                      needs_attention + reconcile_stale. THE one Step-3d
                      derivation — the driver call writes the `brief_state`
                      audit event, so the orchestrator must NOT call it
-                     again (one event per fire).
+                     again (one event per fire). BRIEFSTATE1: the two
+                     substrate-derivable inputs ride the call —
+                     `sent_reconcile_cursor` (so `reconcile_stale` means
+                     something instead of being always-true) and
+                     `thread_activity` (so the 7-day drop applies here too).
+                     The connector-fed inputs do not; see the call site for
+                     the named degradation.
       watchdog_line  task_watchdog.brief_watchdog_line — append verbatim
                      when non-None (S3 light pass).
       money_lines    FB-20's ONE carve-out: money-class proposals (deal
@@ -1565,6 +1676,33 @@ def build_morning_brief_pack(workspace_root, *, mode: str = "scheduled",
         user_id = None
     state = compute_and_log_brief_state(
         ws, open_commitments=opens, user_person_id=user_id, now_iso=now_iso,
+        # BRIEFSTATE1 — the substrate-derivable brief-state inputs, passed.
+        # This call used to pass NONE of them, and two things followed
+        # deterministically on every scheduled fire: the cursor defaulted to
+        # None so `reconcile_stale` was structurally always True (the
+        # staleness line rendered daily and every needs-attention row was
+        # softened, on workspaces reconciling cleanly four times a day), and
+        # the recent-activity drop could not apply at all, so this path and
+        # the hand-driven Step-3d path disagreed by construction.
+        sent_reconcile_cursor=_sent_reconcile_cursor(ws),
+        thread_activity=_brief_thread_activity(ws),
+        # DELIBERATE DEGRADATION, named so no one reads it as an oversight:
+        # `threads` (Step 3c latest-sender) and `calendar_events` (Step 3c-bis)
+        # stay unpassed because both require connector I/O — a Gmail
+        # `get_thread` per linked thread and a Calendar `list_events` — and
+        # this driver is connector-free by contract (every fetch belongs to
+        # the orchestrator). So on a scheduled fire the latest-sender drop and
+        # the calendar drop do not apply and those items surface; the manual
+        # Step-3d path, which holds the fetches, keeps both. Surfacing an item
+        # the CEO already handled by email is the safe direction of that
+        # residual gap, and closing it properly means threading cached
+        # connector state through the pack — a design item, not this build.
+        # `todays_meetings` is likewise the orchestrator's: today's meetings
+        # come out of the prep leg's calendar fetch (`prep_leg.run_prep_leg`),
+        # which this pack builder neither calls nor receives. Nothing about
+        # the pack changes as a result — this surface has never carried a
+        # meeting-linked block for it to feed — so it is a drop-input, not
+        # the defect.
         # BRIEFFIX1 Item C / F1 — the driver is the ONE place that already
         # knows the run mode, so it is the place that stamps it. Without this
         # the audit event is identical on both paths and the receipt-ordering
@@ -1654,6 +1792,289 @@ def build_morning_brief_pack(workspace_root, *, mode: str = "scheduled",
         out_dir.mkdir(parents=True, exist_ok=True)
         stamp = now_iso[:19].replace(":", "-")
         atomic_write_text(out_dir / f"morning-pack-{stamp}.json",
+                          json.dumps(pack, indent=2, ensure_ascii=False))
+    except Exception:
+        pass  # the pack in hand is what matters; the audit copy is best-effort
+
+    return pack
+
+
+def build_end_of_day_pack(workspace_root, *, mode: str = "scheduled",
+                          now_iso: str | None = None,
+                          close_result: dict | None = None,
+                          calendar_events=None,
+                          calendar_available: bool | None = None,
+                          todays_meetings=None,
+                          processed_meeting_ids=None,
+                          connector_gaps=None,
+                          held_ids=None,
+                          lateness=None) -> dict:
+    """SPEC EOD1 — the End of Day fire's seven blocks, assembled in ONE call.
+
+    The t3 FB-9 pattern the morning brief already runs on: one fetch per fire,
+    blocks placed, never re-derived. The orchestrator does the connector half
+    (mail, chat, calendar) and hands the results in; this assembles the read.
+
+    Blocks, in render order (SPEC BK2's table is the contract):
+
+      alarm_lines  substrate_health.substrate_alarm_lines — verbatim, pinned
+                   top, never suppressed. Same block, same reason, same
+                   degrade-honestly posture as the brief: a stale view here is
+                   already LOUD, so the surface renders rather than vanishes.
+      coverage     SPEC EODLEDGER1 — what this fire actually READ, per
+                   capability: mail and chat through their own cursors (naming
+                   the span when one is behind), calendar present or absent,
+                   and the capture leg's window with what is still owed. Same
+                   never-suppressed posture as `alarm_lines`, and placed
+                   directly under them: a reader cannot weigh a number until
+                   they know what aperture produced it, and everything below
+                   this block is a number.
+      score        the report card. The morning fire's receipt joined against
+                   today's closures, plus the saved digest read back off disk.
+                   NO morning receipt → "No plan on record this morning",
+                   never a guessed score. An item with no close on file is
+                   "Not recorded", NEVER "not done".
+      wins         events since the morning fire, by NAME. Zero → one honest
+                   line, never padding.
+      slipped      the ball-is-on-you rows, from the GATED needs-attention set
+                   only (Step 3c/3c-bis; Bug #93 class), max 3, verbs on each.
+      confirm      confirm_flow.select_confirm_items relocated here, capped 5.
+                   Held captures can never enter it.
+      tomorrow     the wide calendar look, the rollover, and the day_intent
+                   auto-DRAFT. The draft is `origin="proposed"` and is written
+                   ONLY on tap-confirm, by the orchestrator, through BK1's
+                   writer. Nothing in this call writes one.
+      sign_off     computed, never composed. Zero urgent → the verbatim line.
+
+    Monday additionally carries `week_rollup` (the prior week's day-scores,
+    where a day with no fire reads "no close was recorded" and NEVER zero) and
+    the `development_read` SLOT, which renders NOTHING until DEVREAD1.
+    Friday is a plain day-close with NO hand-off line (Conflict D).
+
+    **This driver writes no `brief_state` audit event.** It calls the PURE
+    `compute_brief_state`, because `brief_receipt.orphan_brief_finding` reads
+    the newest `brief_state` of any origin and expects a morning-brief receipt
+    after it: an evening fire logging one would make every evening look like a
+    morning brief that lost its receipt AND would stale-refuse the next
+    morning's `mark done [n]`. The evening borrows the derivation; the morning
+    keeps the write.
+
+    SPEC EODLEDGER1 adds three things and no connector. `coverage` states the
+    aperture (above). `score["ledger"]` states what the day did to the OPEN
+    BOOK — book at open → opened → closed → dropped → book now — with the
+    opening figure READ off the morning fire's own `brief_state` and NO
+    arithmetic at all when there is none to read. And `catchup` is the label a
+    LATE day-close arrives under: pass the Phase 2.9 `check_lateness` return as
+    `lateness=` and, on the degrade tier only, the pack composes the span the
+    read covers. Every field any of them renders is already computed here or
+    read from this workspace's own ledger; nothing new is fetched.
+
+    It writes no RECEIPT either. `end_of_day.log_end_of_day_receipt` is the one
+    writer, called by the orchestrator AFTER the capture leg and BEFORE the
+    post — the receipt carries the capture leg's window fields as well as this
+    pack's id map, and it has to precede the numbered surface (BRIEFFIX1 Item
+    C). See that function for why the order is load-bearing.
+    """
+    import end_of_day as eod
+    from chat_output_renderer import validate_chat_output
+    from commitment_state import cap_needs_attention, compute_brief_state
+    from cru_match import load_open_commitments
+    from primary_user import resolve_primary_user
+    from substrate_health import substrate_alarm_lines
+
+    if mode not in ("scheduled", "manual"):
+        raise ValueError(f"mode must be scheduled|manual; got {mode!r}")
+    ws = Path(workspace_root)
+    now_iso = now_iso or _now_iso()
+    if calendar_available is None:
+        # A caller that handed over no fetch AT ALL had no calendar capability;
+        # a caller that handed over an EMPTY fetch had one and tomorrow is
+        # clear. The two are different claims and the default must not collapse
+        # them — "nothing tomorrow" is a statement, "I could not look" is an
+        # absence, and only the second belongs in `connector_gaps`.
+        calendar_available = calendar_events is not None
+
+    # The fire's OWN instant decides the day, resolved workspace-LOCAL through
+    # tz.py. Never the process clock and never UTC: at 9 PM Pacific the UTC
+    # calendar has already rolled over, which is the hour this fire runs.
+    today = eod.workspace_today(ws, now=now_iso)
+    for_date = today.isoformat()
+    tomorrow_date = (today + _dt.timedelta(days=1)).isoformat()
+    branch = eod.day_branch(today)
+
+    alarm_lines = list(substrate_alarm_lines(ws) or [])
+
+    soften = eod.soften_floor(close_result)
+    softened = bool(soften.get("softened"))
+
+    opens = load_open_commitments(_events_path(ws))
+    try:
+        user_id = resolve_primary_user(ws)
+    except Exception:
+        user_id = None
+    state = compute_brief_state(open_commitments=opens, user_person_id=user_id,
+                                now_iso=now_iso, workspace_root=str(ws))
+    lane = cap_needs_attention(state.get("needs_attention") or [],
+                               now_iso=now_iso)
+    brief_state = {
+        "headline": (state.get("counts") or {}).get("headline") or {},
+        "needs_attention": lane["shown"],
+        "needs_attention_total": lane["n_total"],
+        "needs_attention_more": lane["n_more"],
+        "dropped": state.get("dropped") or [],
+    }
+
+    morning = eod.morning_fire(ws, for_date, now_iso=now_iso)
+    digest = eod.read_morning_digest(ws, morning)
+    # `since_ts` is None on a day whose morning brief never fired, and that is
+    # the correct answer from `morning_fire`. Both readers below floor it to
+    # workspace-local midnight themselves (SPEC WINSFLOOR1) and report which
+    # window they used — the floor is IN the helpers, deliberately, so nothing
+    # here has to remember to apply it.
+    since_ts = morning.get("ts")
+    closures = eod.closures_since(ws, since_ts, now_iso=now_iso)
+    open_ids = [str((ev.get("data") or {}).get("id"))
+                for ev in opens if isinstance(ev, dict)]
+
+    # THE LEDGER (SPEC EODLEDGER1 part 2). The opening figure is READ off the
+    # morning fire's own `brief_state` — never inferred, and specifically never
+    # today's count standing in for this morning's. `opens_since` uses the SAME
+    # `_window` resolution `closures_since` does, so both sides of the ledger
+    # are measured over one span.
+    opening = eod.opening_book(ws, morning, now_iso=now_iso)
+    opened = eod.opens_since(ws, since_ts, now_iso=now_iso)
+    ledger = eod.compute_ledger(opening=opening, n_opened=opened["n"],
+                                closures=closures, brief_state=brief_state)
+
+    score = eod.compute_score(morning=morning, digest=digest,
+                              open_ids=open_ids, closures=closures,
+                              softened=softened,
+                              # EODFIX1 — the first_move check needs to know
+                              # whether the close phase could see the day at
+                              # all: "nothing closed it" over a stale cursor
+                              # is not a measurement.
+                              close_legs=soften.get("legs"),
+                              ledger=ledger)
+    wins = eod.compute_wins(ws, since_ts, now_iso=now_iso)
+    slipped = eod.compute_slipped(brief_state=brief_state, morning=morning,
+                                  todays_meetings=todays_meetings,
+                                  processed_meeting_ids=processed_meeting_ids,
+                                  now_iso=now_iso, softened=softened,
+                                  # THE HONEST DENOMINATOR (EODLEDGER1). The
+                                  # lane handed over above was ALREADY bounded
+                                  # by `cap_needs_attention`; without this the
+                                  # slipped block would print "3 of 5" over a
+                                  # lane holding 41.
+                                  lane_total=brief_state["needs_attention_total"])
+    confirm = eod.compute_confirm(opens, now_iso=now_iso, held_ids=held_ids)
+    # PERSONLOOP1 §0-3 — the confirm block's second half. It rides INSIDE the
+    # confirm block rather than as a new pack block, so `BLOCK_ORDER` and
+    # every `blocks_rendered` claim are unchanged, and
+    # `confirm_ids_from_pack` appends these rows LAST so no pre-existing
+    # number moves. This is a CODE chokepoint on purpose: the fire's prose
+    # cannot forget a step it does not perform.
+    _pcand = eod.compute_person_candidates(ws, now_iso=now_iso)
+    confirm["person_rows"] = _pcand["rows"]
+    confirm["person_total"] = _pcand["n_total"]
+    confirm["person_telemetry"] = _pcand["telemetry"]
+    tomorrow = eod.compute_tomorrow(ws, for_date=tomorrow_date,
+                                    calendar_events=calendar_events,
+                                    brief_state=brief_state,
+                                    calendar_available=calendar_available)
+    sign_off = eod.compute_sign_off(slipped=slipped, tomorrow=tomorrow,
+                                    now_iso=now_iso, brief_state=brief_state)
+
+    # THE COVERAGE STRIP (SPEC EODLEDGER1 part 1). Composed LAST among the
+    # blocks and placed FIRST among them: it needs `unsourced_closes` and the
+    # tomorrow block's own answer about the calendar. That last point is the
+    # fence, not a convenience — "the calendar was not read" and "tomorrow is
+    # empty" rendered identically before this spec, and they cannot disagree
+    # now because there is one boolean behind both of them.
+    unsourced = eod.unsourced_closes(closures)
+    coverage = eod.compute_coverage(
+        ws, close_result=close_result, connector_gaps=connector_gaps,
+        calendar_available=tomorrow["calendar_available"],
+        now_iso=now_iso, n_unsourced=len(unsourced),
+        capture=eod.capture_aperture(ws, now_iso=now_iso))
+
+    # THE CATCH-UP READ (SPEC EODLEDGER1 part 3, M's ruling on D3). Present on
+    # every fire and `renders: False` on all but the degrade tier — one
+    # unconditional thing for the fire to read, the same posture `directive`
+    # takes. `lateness` is the Phase 2.9 return, unmodified; nothing here
+    # recomputes lateness and nothing here touches `late_fire`.
+    catchup = eod.compute_catchup_read(lateness=lateness or {},
+                                       workspace_root=ws, now_iso=now_iso)
+
+    pack = {
+        "surface": eod.SURFACE,
+        "task_id": eod.TASK_ID,
+        "mode": mode,
+        "now": now_iso,
+        "for_date": for_date,
+        "branch": branch,
+        "alarm_lines": alarm_lines,
+        "coverage": coverage,
+        "catchup": catchup,
+        "close": close_result or {},
+        "soften": soften,
+        "score": score,
+        "wins": wins,
+        "slipped": slipped,
+        "confirm": confirm,
+        "tomorrow": tomorrow,
+        "sign_off": sign_off,
+        "brief_state": brief_state,
+        "connector_gaps": list(connector_gaps or []),
+        "unsourced_closes": unsourced,
+        # EODLEDGER1 — what entered the book in the same window the closes were
+        # read over. The ledger's other side; carried so a reader can check the
+        # arithmetic against the two counts rather than trust the sentence.
+        "opened": opened,
+        # WHICH WINDOW THE EVENING READ (SPEC WINSFLOOR1). `wins` carries its
+        # own copy for the renderer; this is where the closure read — which has
+        # no block of its own — says the same thing. Read STRICTLY off the
+        # object each helper returned: a defaulted read would report the wrong
+        # window rather than fail.
+        "window": {
+            "anchor_ts": since_ts,
+            "wins": wins["window_source"],
+            "closures": closures.window_source,
+            "closures_since": closures.since,
+        },
+    }
+    if branch == "monday":
+        pack["week_rollup"] = eod.week_rollup(ws, for_date=for_date,
+                                              now_iso=now_iso)
+        pack["development_read"] = eod.development_read_slot(ws)
+    pack["confirm_ids"] = eod.confirm_ids_from_pack(pack)
+
+    # Leak-scan every text line the pack hands the orchestrator. Loud by
+    # design, in the driver, before any of it reaches a chat turn.
+    scannable = "\n".join(
+        alarm_lines
+        # EODLEDGER1 — the three new text surfaces are scanned like every
+        # other one. The coverage strip carries connector reasons that arrived
+        # from the orchestrator, which is exactly the shape a leak travels in.
+        + list(coverage.get("lines") or [])
+        + list(catchup.get("lines") or [])
+        + [l for l in [score.get("line"), wins.get("line"),
+                       wins.get("more_line"), slipped.get("more_line"),
+                       slipped.get("soften_line"), confirm.get("more_line"),
+                       (ledger or {}).get("line"),
+                       (ledger or {}).get("residual_line"),
+                       sign_off.get("line"),
+                       tomorrow.get("line")] if l]
+        + list(score.get("notes") or [])
+    )
+    if scannable.strip():
+        validate_chat_output(scannable)
+
+    try:
+        from atomic_write import atomic_write_text
+        out_dir = ws / "_hq" / ".system" / "briefs"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        stamp = now_iso[:19].replace(":", "-")
+        atomic_write_text(out_dir / f"end-of-day-pack-{stamp}.json",
                           json.dumps(pack, indent=2, ensure_ascii=False))
     except Exception:
         pass  # the pack in hand is what matters; the audit copy is best-effort
@@ -2088,7 +2509,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("surface",
                     choices=["commitments", "staff-meeting", "waiting-on",
-                             "my-plate", "morning-brief"])
+                             "my-plate", "morning-brief", "end-of-day"])
     ap.add_argument("--workspace", required=True)
     ap.add_argument("--mode", default="scheduled",
                     choices=["scheduled", "manual"],
@@ -2113,6 +2534,30 @@ def main() -> int:
                          "before `show more` rebuilds and SAYS it refreshed "
                          "(default page_snapshot.DEFAULT_TTL_MINUTES)")
     ap.add_argument("--now", default=None, help="ISO now override (tests)")
+    ap.add_argument("--close-json", default=None,
+                    help="end-of-day only: JSON file with the close phase's "
+                         "own record ({\"mail\": <receipt>, \"chat\": "
+                         "<receipt>}) — the soften floor reads whether either "
+                         "leg advanced its cursor")
+    ap.add_argument("--calendar-json", default=None,
+                    help="end-of-day only: JSON file with the wide "
+                         "now->+3d calendar fetch; omit it and the tomorrow "
+                         "block renders its intent half and the fire "
+                         "receipts the missing leg")
+    ap.add_argument("--lateness-json", default=None,
+                    help="end-of-day only: JSON file with the Phase 2.9 "
+                         "`check_lateness` return, VERBATIM. On the degrade "
+                         "tier the pack composes the catch-up label the "
+                         "surface opens with (SPEC EODLEDGER1); on every "
+                         "other tier the block is present and renders "
+                         "nothing. Never edited on the way in — the fire "
+                         "passes what the helper returned")
+    ap.add_argument("--gaps-json", default=None,
+                    help="end-of-day only: JSON file with the fire's "
+                         "`connector_gaps` — the plain-English reason each "
+                         "absent capability was skipped. The coverage strip "
+                         "renders these; without them a skipped leg reads as "
+                         "'nothing on the record says why'")
     ap.add_argument("--moves-json", default=None,
                     help="staff-meeting only: JSON file with the Phase-4 "
                          "moves rows (email-shaped item dicts)")
@@ -2160,6 +2605,34 @@ def _dispatch(args) -> int:
         pack = build_morning_brief_pack(args.workspace, mode=args.mode,
                                         now_iso=args.now)
         print("CR-BRIEF-PACK: " + json.dumps(pack, ensure_ascii=False))
+        return 0
+
+    if args.surface == "end-of-day":
+        # SPEC EOD1 — the evening bookend. ONE line out, the same contract the
+        # brief pack keeps: every non-empty block is a mandatory placement.
+        close_result = None
+        if args.close_json:
+            close_result = json.loads(
+                Path(args.close_json).read_text(encoding="utf-8"))
+        calendar_events, calendar_available = None, False
+        if args.calendar_json:
+            calendar_events = json.loads(
+                Path(args.calendar_json).read_text(encoding="utf-8"))
+            calendar_available = True
+        lateness = None
+        if args.lateness_json:
+            lateness = json.loads(
+                Path(args.lateness_json).read_text(encoding="utf-8"))
+        connector_gaps = None
+        if args.gaps_json:
+            connector_gaps = json.loads(
+                Path(args.gaps_json).read_text(encoding="utf-8"))
+        pack = build_end_of_day_pack(
+            args.workspace, mode=args.mode, now_iso=args.now,
+            close_result=close_result, calendar_events=calendar_events,
+            calendar_available=calendar_available,
+            connector_gaps=connector_gaps, lateness=lateness)
+        print("CR-EOD-PACK: " + json.dumps(pack, ensure_ascii=False))
         return 0
 
     if args.fmt == "artifact":
@@ -2214,6 +2687,7 @@ def _dispatch(args) -> int:
 __all__ = [
     "MountStaleError",
     "build_commitment_triage_view",
+    "build_end_of_day_pack",
     "build_morning_brief_pack",
     "build_my_plate_view",
     "build_staff_meeting_view",

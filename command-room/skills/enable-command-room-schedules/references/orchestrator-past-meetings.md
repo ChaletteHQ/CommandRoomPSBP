@@ -1,6 +1,8 @@
-# Orchestrator prompt — Past Meetings
+# Orchestrator prompt — End of Day (taskIds `end-of-day` AND `past-meetings`)
 
-This file is the EXACT prompt registered with `create_scheduled_task` for `taskId: past-meetings`. Fires 5:00 PM weekdays local. Replaces the v2.7-v2.10.1 `cr-meetings-processed` task (renamed for executive clarity). Events this file writes carry `source_skill='past-meetings'` (bare since v2.14.27); workspaces with pre-rename history at `source_skill='cr-past-meetings'` stay valid as append-only history.
+This file is the EXACT prompt registered with `create_scheduled_task` for BOTH ids. Fires 5:00 PM weekdays local. **SPEC EOD1 (2026-08-16) turned this fire from a meeting-processing job into the day's CLOSE**, upgraded IN PLACE rather than replaced: the registered prompt on every live machine names THIS filename and loads its steps fresh at fire time, so upgrading the file the task already reads is the only change that reaches a machine without a re-registration. **SPEC EOD2 pointed the new `end-of-day` taskId at this same file** — one file, two `ORCHESTRATOR_MAP` rows, no fork; the rename is proposed, never applied, so a machine still on `past-meetings` fires this exact pack indefinitely. (Why the filename keeps the old name, and why the receipt does too: see the EOD2 note after the contract block.)
+
+**M's rulings this fire implements (2026-08-16, locked):** ONE chat, not two. The client is never handed a pile. The day-close should make the open book smaller most days. What End of Day reads, it writes to memory with a resolvable pointer — the daily close IS the daily memory commit.
 
 **OUTPUT CONTRACT (v2.13.0+ — MANDATORY):** every chat post follows `shared/CONTRACT.md`. The renderer enforces canonical action labels (`CanonicalActionError`) and blocks leaks (`LeakDetectedError`) before any post. Rules 1–18 are non-negotiable. The widget + Links section is the ENTIRE chat turn; STOP after that. No commentary, no narration.
 **Brief save path (v2.13.0+):** all `.docx` briefs save to `_hq/meetings/` via `shared/scripts/brief_path.py` `get_brief_path("past_meeting", slug, date)`. NEVER hand-roll paths. NEVER save to `[Project]/meetings/` (that path didn't always resolve in Cowork's sandbox).
@@ -13,13 +15,36 @@ This file is the EXACT prompt registered with `create_scheduled_task` for `taskI
 
 Read `shared/STOP_CONTRACT.md` from disk and obey it as your first action of every fire. It carries the canonical post-widget output rules. Pre-v3.5.0 each orchestrator inlined a ~25-line copy; v3.5.0+ they reference the shared file.
 
-Past-meetings-specific scope notes:
-- `.docx` meeting briefs in `_hq/meetings/` continue per Phase 4 — those are documented per-meeting deliverables, separate from the post-widget output surface the STOP CONTRACT governs.
-- Re-runs of past-meetings (`regenerate past meetings`, `re-process today's meetings`) re-execute Phase 1 onward; do NOT save intermediate outputs.
+End-of-Day-specific scope notes:
+- `.docx` meeting briefs in `_hq/meetings/` continue per Phase 4 (inside Phase D) — those are documented per-meeting deliverables, separate from the post-widget output surface the STOP CONTRACT governs.
+- Re-runs (`end of day`, `regenerate past meetings`, `re-process today's meetings`) re-execute Phase 1 onward; do NOT save intermediate outputs.
 
 ---
 
-You are firing the Command Room "Past Meetings" chat. End-of-day pass: auto-process today's meetings, commit the obvious, surface only ambiguous items for the user's call.
+## EOD2 — the two taskIds, and the two names that deliberately did NOT move
+
+**The FILENAME keeps saying `past-meetings`.** Registration substitutes `<ORCHESTRATOR_FILENAME>` into each task's bootloader at registration time, so every `past-meetings` prompt already on the fleet names this exact file. Renaming it would break every one of those registrations at their next fire — a plugin upgrade that turns working chats into load errors. Giving `end-of-day` its own file would be worse: two files for one pack, drifting apart from the first edit that only lands in one of them. So `ORCHESTRATOR_MAP` has two rows pointing here, and that is the whole mechanism. (Same reason `waiting-on` → `orchestrator-commitments.md` and `pulse` → `orchestrator-dont-forget.md`.)
+
+**The RECEIPT keeps saying `past-meetings` too** — `end_of_day.TASK_ID`, unchanged by EOD2, and the Phase 5 writer below is unchanged with it. The rename is per-machine and propose-only, so at any moment part of the fleet fires under each id; writing the receipt under whichever id happened to fire would split one day-close history into two half-series at whatever date each customer took the offer, and the week roll-up, the score, `catchup_window` and `late_fire` all read that series. It stays one series. `receipts.TASK_PREDECESSORS["end-of-day"] = ("past-meetings",)` is how the new id reads it.
+
+**What this means when you fire:** nothing. Do not branch on which taskId started you, do not mention the rename in the chat post, and do not write anything under `end-of-day`. Both ids are this pack.
+
+---
+
+You are firing the Command Room **End of Day** chat. You are closing the day: reconcile what it discharged, resolve what changed, read the day back, and — LAST — capture the day's meetings.
+
+## The four phases, and why the order is the contract (SPEC EOD1 §2)
+
+| Order | Phase | What it is |
+|---|---|---|
+| 1 | **Close** (Phase A) | The in-fire sent/chat reconcile. Same cursor, same audit event as the maintenance jobs |
+| 2 | **Reconcile** (Phase B) | People / deal / identity resolution, same-day and receipted. Existing machinery, nothing new |
+| 3 | **Read** (Phase C) | The seven blocks. Computed and FROZEN here |
+| 4 | **Capture** (Phase D = the existing Phases 3 → 4.8) | Meeting processing, LAST and fenced |
+
+**Capture is last for a reason that is not tidiness.** A capture written earlier in this fire would be scored by this same fire's reconcile ("did you already handle the thing you wrote down four minutes ago?") and counted by this same fire's read. Capture-last is the circularity fence, and it is the same fence Phase 4.6's `exclude_captured_since` enforces one level down.
+
+**The read is computed BEFORE capture and delivered AFTER it.** Phase C builds the pack and holds it; Phase D does the fire's final work; Phase 5 writes the ONE receipt (carrying both the read's numbered map AND the capture leg's window fields); Phase 6 posts. Receipt-before-post is BRIEFFIX1 Item C and is not negotiable — see Phase 5.
 
 # Phase 1 — Always run (no idempotency gate, v2.10.5+)
 
@@ -59,16 +84,163 @@ print(json.dumps(check_lateness('<workspace_root>', 'past-meetings', fired_via='
 - **Today's date is `clock["today"]`** — take it from the return rather than computing one here.
 
 
+**Read `directive` BEFORE the tier — it is the render decision (SPEC SCHED1).** If `directive` is `skip_render`, the slot this fire is serving was ALREADY delivered: a receipt for it is on the ledger, and the helper has already written the honest `skipped` receipt for this fire. Post the returned `ack` line, exactly as returned, as the ENTIRE output of this fire — no surface, no widget, no sections, no Sources block, and no receipt of your own — then STOP. Do not re-derive whether it "really" ran, do not render a shortened version, and do not read the tier as the decision: on this path the tier is `none`, `none` means "run normally", and that reading is what delivered three duplicate full surfaces in one day. `directive` is present on every tier and is `null` on all the others, so this is one unconditional check rather than a special case to remember. A `manual` fire never carries it — a human who asks for the surface gets the surface.
+
 Branch on `tier` (this does not weaken the anti-improvisation contract — every phase below still executes verbatim; the tier only governs what is RENDERED):
 
 - **`manual`** — an interactive fire is never late: run EVERY phase normally (connector pre-scans included — a run mode never adds skip conditions), with NO timing banner and NO lateness narrative of any kind, anywhere. The helper wrote no event; do not hand-compute lateness around it (FINDINGS F-47 P1a).
 - **`none` / `exempt` / `unknown`** — run normally. No mention of timing anywhere. `none` with a `suppressed` reason means the helper's ledger found the slot already served (a receipt exists after it) or minted by a schedule change — believe it: never re-derive lateness, never invent a cause ("the computer was probably asleep").
 - **`note` (3–24h late)** — run ALL phases normally, but the chat output OPENS with the returned `banner` line verbatim (one line, before anything else). Nothing else changes.
-- **`degrade` (>24h late)** — the surface is stale; do NOT render it. Execute every phase below EXCEPT the surface-rendering one (the widget-render/post phase): all substrate writes the task owes — events, view updates, the Phase-final `pack_run` receipt — still happen, silently and explicitly (skipping them is the Bug #98 class: an invisible write must not lose to a suppressed deliverable). Then post ONLY the returned `degrade_notice` line as the entire chat output and STOP. No widget, no digest, no Links section. The next Morning Brief reads events.jsonl, so nothing captured is lost.
+- **`degrade` (>24h late)** — **this surface RENDERS, LABELLED (SPEC EODLEDGER1 part 3, M's ruling on D3, 2026-08-19). It does not withhold.** Run every phase below exactly as on any other tier, and open the chat output with `pack["catchup"]["lines"]` verbatim — the span the read covers, how late it is, and the slot it missed. Then the surface, in full.
+
+  **What this replaces, and why.** Pre-EODLEDGER1 this branch performed every substrate write and then posted `degrade_notice` alone. The score anchors on TODAY's morning receipt, so a skipped Tuesday was never scored — not that evening, not ever — and the only surviving trace was a Monday roll-up row reading "no close was recorded". The catch-up machinery worked perfectly and its output was shown to nobody. The degrade tier's instinct was right (a stale surface must never be presented as fresh) and M's ruling is that the remedy is to **label the span, not to withhold it**.
+
+  **DO NOT POST `degrade_notice` ON THIS SURFACE.** It reads "Skipped the full End of Day …", which is true on every other scheduled surface and false on this one the moment it renders. It is a SHARED constant and it is not being reworded — every other orchestrator still posts it as its whole output, and changing it would silently re-render stale surfaces fleet-wide, which nobody ruled on. Carry it onto the receipt instead (Phase 5) so the record keeps the tier's own words; the reader sees `pack["catchup"]["lines"]`.
+
+  **ONE READ, NOT ONE PER MISSED DAY.** `pack["catchup"]["days"]` is the whole span and the label names its ends. Do not fire the surface once per missed day, do not stack per-day sections, and do not narrate the tier name or the word "degrade" anywhere in chat. The per-day detail already lives in the Monday roll-up; a stack of stale surfaces is the pile M's ruling removed.
+
+  **THE SCOPE FENCE.** `late_fire.LATENESS_TIERS` keeps its 3h/24h thresholds and `check_lateness` keeps its return contract byte-for-byte. Only THIS orchestrator's degrade branch changed. Every other scheduled surface keeps today's suppress-on-degrade behaviour, and a fire that finds itself in this branch on any other surface is still suppressing.
+
+  **AND `skip_render` IS STILL `skip_render`.** A slot already delivered posts its `ack` and stops — read `directive` BEFORE the tier, as this file has always required. Late is not the same as duplicate: `renders` on the catch-up block is False whenever a directive is present, and conflating the two is what delivered three duplicate full surfaces in one afternoon.
 
 The helper already appended the `late_fire` telemetry on note/degrade tiers (cleanup and the insight pass consume it to propose better default times) — do not append a second one, and never narrate the event or the tier name to the user. Carry the returned `receipt_fired_via` (`manual` / `scheduled` / `catchup`) into the fire receipt — it is the ONLY `fired_via` value `log_receipt` gets; never guess it independently.
 
-# Phase 3 — Find unprocessed meetings (everything since the last successful run)
+# Phase A — CLOSE: reconcile what the day discharged, in this fire (SPEC EOD1 §2.1)
+
+Record `fire_start` (UTC ISO) **now, before anything below writes**. Phases 4.6 and 4.6.b both need it and it must predate every append this fire makes.
+
+Run the SAME machinery the maintenance jobs run — same functions, same cursor, same audit event. Not a copy of it: `reconcile-sent` and `reconcile-chat` are jobs inside the `maintenance` task and this fire calls their entry points directly, so the 17:45 maintenance pass finds an ALREADY-ADVANCED cursor and closes nothing twice. A second implementation here would be a second cursor, and two cursors over one mailbox is how a close gets written twice.
+
+**Ask per capability, and skip-and-receipt what is absent.** Resolve mail through the seam (`tool_discovery.discover_for_category("email", "search", tools, declared=connector_config.declared_backend("email"))`) and chat through `chat_seam.resolve_chat_provider`. A capability that is not present is not an error and not a silence: pass the plain-English reason as `fetch_blocked=` so the leg records a BLOCKED run (which never advances a cursor), and carry the reason into Phase 5's `connector_gaps`. This build reaches for **email, calendar and chat** and nothing else; CONN1/CONN2 add Drive and DocuSign later by adding rows to this list, not by redesigning the fire.
+
+**THE SENT FETCH FLOOR (SPEC MAILFLOOR1) — how far back the mail leg reads, in the same three branches as `skills/reconcile-sent/SKILL.md` Step 1.** "The Sent batch you just fetched" below is not a batch of today: choose the floor by mode, and the modes are these three and no others. **First real run on this workspace** — detected as `reconcile_sent_commitments.validate_reconcile_ran(WORKSPACE_ROOT)["ran"] is False` (import it alongside `reconcile_and_receipt` below; this detection runs BEFORE the fetch, so it cannot wait for that block), i.e. no prior `sent_reconcile` audit event exists — fetch the **last 30 days** regardless of the cursor. **Manual catch-up phrasing** ("catch up my sent mail" / "reconcile the last N days" / "reconcile my backlog") — fetch the requested window, default **30 days**, regardless of the cursor. **Otherwise**, a prior audit event exists, so fetch with the `{"in_sent": true, "after": <cursor date>}` intent — the date read from `workspace.sent_reconcile_cursor` — with a **~1-day overlap** behind the cursor, cheap and idempotent and it catches near-cursor stragglers. The intent is compiled per provider by `connector_adapters/mail.py`, exactly as today; never name a provider operator here. **An over-wide window is always safe, which is why you never narrow this one:** matching is idempotent and the cursor never moves backwards, so a wide re-scan closes nothing twice. A window narrower than the gap is the failure that has no such symmetry — `reconcile_and_receipt` advances the cursor to the newest message in whatever batch it was handed, so a fire that fetches only today after a four-day gap strands every send inside those four days permanently, behind a cursor that now claims to have reconciled past them and a green receipt on the record (Bug #101). **This paragraph and `skills/reconcile-sent/SKILL.md` Step 1 are twins:** editing either window here is editing it there, in the same edit, and a test pins the pair equal.
+
+**The chat leg's window is not composed by hand either.** It comes from `chat_reconcile.backfill_floor(WORKSPACE_ROOT)` — the stored chat cursor, or a short fixed backfill on a first-ever run — and nothing else: never a span you compose, never a bound you add to "help", never full history (passive whole-history ingestion is the named anti-goal). It is already correct in code; naming it here is what stops a future edit from improvising one.
+
+```python
+# (Inside python3, after the Rule 22 preamble + sys.path.insert)
+from reconcile_sent_commitments import reconcile_and_receipt
+from chat_reconcile import reconcile_chat_and_receipt
+
+mail = reconcile_and_receipt(
+    WORKSPACE_ROOT, sent_messages,           # the Sent batch you just fetched
+    user_person_id=USER_PERSON_ID,
+    source_skill="past-meetings",
+    fired_via=lateness["receipt_fired_via"],
+    provider=<the resolved mail provider tag, never a literal>,
+    exclude_captured_since=fire_start,       # RECONFENCE
+    fetch_blocked=<plain-English reason, or None>,
+)
+chat = reconcile_chat_and_receipt(
+    WORKSPACE_ROOT, chat_messages,
+    user_person_id=USER_PERSON_ID,
+    source_skill="past-meetings",
+    fired_via=lateness["receipt_fired_via"],
+    exclude_captured_since=fire_start,
+    fetch_blocked=<plain-English reason, or None>,
+)
+close_result = {"mail": mail, "chat": chat}
+```
+
+**Every close this fire writes carries its pointer.** `reconcile_and_receipt` and `reconcile_chat_and_receipt` already close through `commitment_state.close_commitment` with the sent message's artifact key / the chat pointer; any close YOU write in this fire (a CRU auto-resolve, a tap the user applies later in the turn) passes `source_ref=` the same way — `granola:<meeting_id>` for a transcript close, and for a human one **the ref the resolver RETURNED**: `resolve_choice(...)["source_ref"]` for a numbered tap, `resolve_intent_confirm(...)["source_ref"]` for the tomorrow confirm. Never compose that string yourself and never reuse one across two gestures: a pointer that is the same for every act of an evening resolves to nothing while still counting as "has a pointer" in the coverage metric. A close with nothing to point at still lands — since SPEC PROVMINT1 the writer mints `session:past-meetings:<now>` for it and marks the ref as surface-minted, so it points at the act rather than at nothing. That floor is not a licence: a close that silently drops a pointer it HAD is still the defect (SPEC PROV1), and it now shows up as a surface-minted row in the coverage split instead of hiding inside one flattering percentage.
+
+**THE SOFTEN FLOOR.** If NEITHER leg advanced its cursor, the score and slipped blocks soften and the surface says so in exactly one line. `end_of_day.soften_floor(close_result)` returns that line; do not compose one, and do not suppress it because the numbers "look right". A score computed over a stale mail cursor understates the closes and overstates the slips, and the CEO is the person who would be blamed for the difference. A leg SKIPPED for want of a connector does not soften on its own — a workspace with no chat backend is not a workspace whose chat is behind.
+
+# Phase B — RECONCILE: resolve what changed (SPEC EOD1 §2.2)
+
+Same-day resolution of people, deal stages and identities, receipted. **This is the existing maintenance machinery run here, not new logic** — `identity_reconcile`, `deal_signal_detector` and the contact/person passes keep their own propose-vs-apply postures exactly as the Sunday slot runs them, and nothing here promotes a proposal. Anything they propose lands in the queue the Phase C `confirm` block reads.
+
+If the maintenance dispatcher has already served today's slots, believe it: `maintenance_dispatcher.due_jobs(WORKSPACE_ROOT)` is the ledger and a job it does not return is a job that already ran. Never re-derive dueness in prose.
+
+# Phase C — READ: build the End of Day pack (the ONE driver, t3 FB-9)
+
+```bash
+python3 shared/scripts/surface_drivers.py end-of-day \
+    --workspace "<WORKSPACE>" --mode <scheduled|manual per Phase 2.9's run mode> \
+    --close-json "<a temp file holding close_result from Phase A>" \
+    --calendar-json "<a temp file holding the wide now->+3d calendar fetch>" \
+    --gaps-json "<a temp file holding this fire's connector_gaps>" \
+    --lateness-json "<a temp file holding Phase 2.9's check_lateness return>"
+```
+
+The driver prints exactly ONE line: `CR-EOD-PACK: {json}`. That is the whole contract. Run it ONCE per fire — a re-run to "refresh" is the RV-3 double-render class.
+
+Omit `--calendar-json` when no calendar capability is present. The `tomorrow` block then renders its intent half and `calendar_available` comes back False; record the gap in Phase 5's `connector_gaps` and say nothing about connectors in chat beyond the coverage strip's own line.
+
+**`--gaps-json` carries the SAME `connector_gaps` list Phase 5 receipts** — one per skipped capability, `{"capability": "mail"|"chat"|"calendar", "reason": "<the plain-English reason you passed as fetch_blocked>"}`. Pass it: the coverage strip renders those reasons, and without them a skipped leg renders as *"not read, and nothing on the record says why"*, which is honest and worse. This is the same list, written once and used twice — never a second list composed for the strip.
+
+**`--lateness-json` is Phase 2.9's return, VERBATIM.** Do not edit it, do not re-key it, do not recompute lateness. On the degrade tier the pack composes the catch-up label from it; on every other tier `pack["catchup"]["renders"]` is False and there is nothing to place.
+
+**Every non-empty pack block is a MANDATORY placement, in this order:** `alarm_lines` · `coverage` · `score` · `wins` · `slipped` · `confirm` · `tomorrow` · `sign_off`. A turn that stops with an unplaced non-empty block is INVALID, not "done early". On a degrade-tier fire, `catchup.lines` goes ABOVE all of them (see Phase 2.9).
+
+Binding notes the pack does not enforce for you:
+
+- **coverage — PRINT EVERY LINE VERBATIM, FIRST, UNDER THE ALARMS (SPEC EODLEDGER1 part 1).** `coverage["lines"]` is composed in code and rendered as given: one line per capability saying what this fire actually READ. Mail and chat through their own cursors — **and when a cursor is behind, the line names the span** ("read through Friday, July 24 — 5 days behind"), which is the sentence that did not exist while M's chat cursor sat five days stale and the surface reported the day's closes with no qualification at all. Calendar present or absent. The capture leg's window, with what is on record in it and what is still owed.
+
+  **NEVER SUPPRESS IT AND NEVER SOFTEN IT.** Same posture as `alarm_lines`, same reason: a degraded read is exactly when the reader most needs to know what the aperture was, and a strip that goes quiet on a bad night is a strip that only ever says everything was fine. Do not re-word a line to sound better, do not drop the stale-cursor clause because the numbers "look right", and do not add a reassuring sentence of your own after it.
+
+  **"Not read" and "nothing there" are different claims and the strip is where they are separated.** A calendar outage and a genuinely empty tomorrow rendered identically before this. `coverage["capabilities"]["calendar"]["read"]` and `tomorrow["calendar_available"]` are ONE boolean by construction — they cannot disagree, so never write a sentence that puts them in conflict.
+
+  The strip's last line, when present, is the data-quality note: the COUNT of closes in this window that cite no artifact anyone can open. A count, not a section, and not a thing to apologise for or explain away.
+- **score.** A `no_plan` verdict means there was no morning fire on record today. Render `line` VERBATIM — "No plan on record this morning." — and render NO score. Never a zero, never a guess, never "looks like a light day". Rows whose `state` is `not_recorded` render the word **"Not recorded"**. **They NEVER render "not done".** The absence of a close event is not evidence the work did not happen, and the difference between those two sentences is the difference between a surface the CEO trusts and one they argue with. When any row is `not_recorded`, the block's `notes` carry the one-line explanation — print it verbatim, once.
+- **score.ledger — THE BOOK'S MOVEMENT (SPEC EODLEDGER1 part 2).** `score["ledger"]` is present on BOTH score branches, including `no_plan`: a day with no morning plan still moved the book. Render `ledger["line"]` verbatim.
+
+  `status: "movement"` — the line reads *book at open → opened → closed → dropped → book now*, with the delta named and its sign meaningful. When `ledger["residual_line"]` is set, print it too: the four movements did not account for the whole change (a confirm out of the review queue, a merge, an edit), and saying so is cheaper than a number that does not add up. Never absorb the residual into one of the movements to make the arithmetic look clean.
+
+  `status: "no_opening_figure"` — **there was no morning fire, so there is NO opening figure and NO arithmetic.** Render the line as given (*"no opening figure on record"*) and stop. Do NOT substitute tonight's count for this morning's, do NOT print a delta of zero, and do NOT describe the day as flat: a guessed baseline is indistinguishable from a measured one once it is on screen, and this is `NO_PLAN_LINE`'s doctrine one field down.
+- **score.first_move — RENDER THE STATUS, NOT JUST THE LINE.** `first_move` is an annotation, not a string: `{text, status, checked_against, matched}`. `status: "open"` — the morning's suggested first move is still live; render it as this morning's plan. `status: "stale"` — something closed today NAMES that line (`matched` says which), so render it as **context about this morning's plan and NEVER as an instruction**: "This morning's first move was X; it closed at 12:30" is right, "Your first move is X" is the defect this replaces. `status: "unverifiable"` — nothing was on file to check it against, so say that plainly in the same breath as the line, or leave the line out; never promote it to a live instruction. `first_move: null` means the brief printed none — render nothing, and never compose one. (Both live packs on 2026-08-17 carried the same discharged line byte-for-byte, at 9 PM, as though it were the next thing to do.)
+- **wins.** Names, not statistics. `line` is set only when there were none; print it and nothing else. A row's `title_source` says where its name came from: `snapshot` / `joined` — render the title; `generic` — the row's `title` is already the whole honest sentence (*"a commitment was closed"*), so render it AS IS and never dress it up with a name, an id, or a guess at which one it was. **When `more_line` is non-empty, print it VERBATIM as the block's last line** — the rows are capped at six and a capped day now routinely hides five times what it shows, so a cap is a render bound and never a silence (the same rule the morning brief's needs-attention lane keeps). Do not add rows back to close the gap, and never restate `n_total` as though it were the number of rows on screen.
+
+  **THE BLOCK SAYS WHICH WINDOW IT READ. `window_source` is `morning_anchor` when the day's morning brief fired — the window opens at that brief — and `day_floor` when it did not, in which case the window opens at workspace-LOCAL midnight of this fire's own day and never earlier.** A day with no morning brief still renders its wins; it simply counts from midnight. `more_line` is already spelled for whichever window applied — *"…more moved today"* on the anchor path, *"…more moved since midnight"* on the floored path — so print it verbatim, as always, and never re-word it to say "today" over a floored window. Do not describe the floored day as having no wins, and do not describe it as a full day's history: it is the day, from midnight.
+- **slipped.** At most 3 rows, each with its verbs. Every row came from the GATED needs-attention set (Step 3c / 3c-bis; the Bug #93 class) — do NOT top the section up from your own reading of the day, and never promote an item the gate dropped. `soften_line`, when set, prints once. **`more_line`, when non-empty, prints VERBATIM as the block's last line** (SPEC EODLEDGER1) — it carries the DENOMINATOR, so a block bounded at 3 over a list of 41 says so instead of reading as 3. Never top the block up to close the gap, and never restate `n_total` as though it were the number of rows on screen.
+- **confirm.** At most 5. Weak or HELD captures are already excluded by the driver; never add one back. **`more_line` prints verbatim as this block's last line too**, on the same rule and from the same helper: this block bound 5 of 67 in silence before EODLEDGER1, and a cap without a denominator is not a summary — it is a claim about size.
+- **tomorrow.** `intent` is the CEO's own stated record (BK1) — render it as fact. `proposal` is a DRAFT the system guessed: render it as a question with the confirm/change taps and NEVER as a statement of what tomorrow is about. It is written only on tap (Phase 6.2).
+- **sign_off.** Print `line` verbatim. It is computed; there is nothing to write here.
+- **Monday** additionally carries `week_rollup` — render it AFTER the day-close blocks. It also carries `development_read`, whose `renders` is False: render NOTHING for it. No heading, no placeholder, no "coming soon". The slot fills when DEVREAD1 ships.
+
+  **⛔ THE ROLL-UP HAS THREE ROW SHAPES AND EVERY ONE OF THEM IS RENDERED FROM WHAT THE ROW SAYS. Never a zero, never a number you supply.** Each row carries `recorded` (did the evening chat run that day) and `counted` (did that fire record a score). Read both:
+
+  | `recorded` | `counted` | Render |
+  |---|---|---|
+  | False | False | the row's `line` verbatim — *"no close was recorded"*. The chat did not run |
+  | **True** | **False** | the row's `line` verbatim — *"the day ran before this count existed"*. **This is the shape the FIRST MONDAY after this upgrade produces for the whole prior week**, and it is not an error |
+  | True | True | `n_closed` of `n_planned` |
+
+  **The middle row is the one that will bite.** This fire serves a taskId that has existed for many releases, so last week's receipts are pre-EOD1: real fires that ran and predate the score. They come back with `n_closed: None` and their own `line`. **Render the line.** Do NOT render `0`, do NOT render a dash, do NOT leave the row blank, do NOT skip the row, and do NOT summarize the week as "a slow week" or "nothing closed" — none of those is a thing the record says. `week_rollup.n_days_uncounted` is the honest count of that shape; a week where it equals 5 is a week that predates the counting, and saying so in one line is the correct read of it.
+
+  The three claims are genuinely different and only one of them is ever about the CEO: zero says the day closed nothing; *"no close was recorded"* says the chat did not run; *"the day ran before this count existed"* says the chat ran and the count did not exist yet. Collapsing any of them into a number is the fabricated-zero failure this surface exists to not commit.
+- **Friday** is a plain day-close. **No hand-off line to the Friday Wrap** (Conflict D, M's ruling): the weekly surface owns that moment and two surfaces reaching for it is how the CEO gets handed the same week twice.
+
+**Timezone.** The fire's own day is `end_of_day.workspace_today`, resolved workspace-LOCAL through `tz.py`. Never the machine clock and never UTC: at 9 PM Pacific the UTC calendar has already rolled over, which is the window this fire runs in, so a UTC-derived "today" would score the wrong day and file tomorrow's intent under the day after. Every rendered connector timestamp goes through `to_local(value, workspace_path=<WORKSPACE>)` as it always has.
+
+**Personification.** The intro line is `"Evening, {first_name} — {brain_name} closing out your day."` from `personification.get_brain_name(WORKSPACE)`, and it is the ONLY greeting. One name in the intro, one at the sign-off, nowhere else.
+
+**Writer wall.** Personal-account items may RENDER (the R9 ephemeral rule) and write nothing: no entity write, no commitment write, no capture from a personal-account read.
+
+**FRP1 first run.** On the first fire only (`not is_configured(WORKSPACE, "end-of-day")`), `save_skill_config(WORKSPACE, "end-of-day", held_tier.CONFIG_DEFAULTS)` before rendering, then append the one-time footer offering the three decisions: tone (scoreboard or journal), the slipped section on or off, the sign-off on or off. Renders exactly once ever.
+
+**HOLD the pack.** Do not post yet. Phase D runs next, then Phase 5 writes the receipt, then Phase 6 posts what you built here. The pack you post is the pack you built BEFORE capture ran — that is the fence, and re-deriving any block after Phase D defeats it.
+
+# Phase D — CAPTURE, last and fenced (SPEC EOD1 §2.4)
+
+Everything from Phase 3 to Phase 4.8 below IS this phase, unchanged in what it writes and unchanged in its doctrine. Two things about it are new:
+
+1. **It runs HERE — after the read is built.** Its writes must not reach the surface this fire already computed.
+2. **It posts NOTHING of its own.** The pre-EOD1 fire ended with a widget listing every processed meeting and its pending sub-items; that is the "pile" M's ruling removes. The meetings contribute their `.docx` links to Phase 6's Links section and their ambiguous items to the queue the `confirm` block reads on the NEXT fire. Nothing about what each gate did changes; only the pile is gone.
+
+**⛔ THE CAPTURE ROUTING FLIP IS DARK.** `meeting_capture.route_meeting_captures` keeps its four outputs and its ruling: a below-floor capture routes to REVIEW, never silently dropped, never deleted. `held_tier.apply_held_routing(routed, WORKSPACE)` is applied to the return, and with the flip OFF — which is every workspace today — it hands the routing back UNCHANGED with an empty held lane.
+
+```python
+from held_tier import apply_held_routing, appendable, held_ids
+routed = apply_held_routing(route_meeting_captures(...), WORKSPACE_ROOT)
+append_event(EVENTS_PATH, appendable(routed), holder='past-meetings.commitments')
+```
+
+`appendable(routed)` is `book + review + observed + HELD`, and held rows are in it deliberately: "out of sight" is a property of the surfaces, not of the disk, and a held capture the fire never wrote could not be retrieved on request.
+
+**Enabling the flip is an M action and it is GATED.** `held_tier.enable_held_routing` calls `precision_gate.precision_gate_status(workspace_root)` and REFUSES while it is not passing — M's ruling of 2026-08-16: at least 90% of meeting-derived items routed to the open book are verified promises, on a labelled sample of at least 100, holding two consecutive dogfood weeks. **This fire never enables it**, never writes the config value to work around the refusal, and never narrates the gate to the user. A fire that flips it has decided the thing the measurement exists to decide.
+
+# Phase 3 — Find unprocessed meetings (everything since the last successful run) — Phase D, step 1
 
 **Project status note (v2.10.3+):** Past Meetings processes meetings regardless of project status (active / dormant / archived). If a meeting routes to a dormant project, the processing still runs AND the project auto-revives per ORG_AND_THREAD_MODEL.md re-active detection — a meeting just happened, the project is no longer dormant.
 
@@ -87,10 +259,26 @@ Use the returned **`start_aware` and `end_aware`** as the Granola query bounds �
 Catch-up applies on EVERY fire here, scheduled or manual, because re-processing is idempotent (the `meeting_processed` / `meeting_skipped` gate below) and catching the backlog up is the point of a manual re-run too.
 
 Call Granola MCP for meetings in `[start_aware, end_aware]`. For each:
-- Check events.jsonl for `meeting_processed` event with matching meeting_id → skip if exists.
-- Check `meeting_skipped` event → skip if exists.
+- **A RECORD IS NOT A RECEIPT.** Whether a meeting is already processed is decided by `meeting_capture.already_processed` — a `meeting_processed` receipt on disk — and never by the existence of a bare `meeting` event. The two used to disagree: the discovery leg counted a record as processed while the process-the-last-call path required a receipt, so a meeting whose receipt landed a day after its record was invisible to this fire AND unprocessed to the manual path at the same moment (records seq 9462/9468, receipts 9680/9681). A `meeting_skipped` event DOES retire a meeting — a deliberate exclusion is handled, not owed.
 - Filter out personal calls (no business attendees, single 1:1 with non-business contact).
 - Filter out internal-only meetings UNLESS they have decisions worth committing.
+
+**⛔ THE CATCH-UP SWEEP (SPEC EODFIX1 §2-4) — run it, never re-derive it.** The window above bounds the CONNECTOR fetch. It does not bound the backlog: a meeting recorded three days ago whose receipt never landed is still owed, and no window that starts at the last successful run will ever find it again. So the fire additionally sweeps every meeting that has a record and no receipt, inside CATCHUP1's 30-day ceiling:
+
+```bash
+SESSION_DIR=$(echo "$CLAUDE_CODE_TMPDIR" | sed "s|/tmp$||"); PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d "$SESSION_DIR"/mnt/.remote-plugins/plugin_*/shared/scripts/chat_output_renderer.py 2>/dev/null | head -1 | sed 's|/shared/scripts/chat_output_renderer.py$||')}"; cd "$PLUGIN_ROOT"
+python3 -c "
+import sys, json; sys.path.insert(0, 'shared/scripts')
+from meeting_discovery import unprocessed_backlog
+print(json.dumps(unprocessed_backlog('<workspace_root>', limit=5)))
+"
+```
+
+- The returned `rows` are OLDEST FIRST and carry refs and instants only — never a title, the same discipline every meeting receipt keeps. **They enter at the SAME DOOR every other meeting enters, and that door is Phase 3.5, not Phase 4.** Fetch each row's meeting from the declared transcript backend by its `source_ref`, then hand it to Phase 3.5's `dedup_meetings` with the rest of this fire's records and route on the verdict it returns: `attended` → Phase 4, `non_attendee` → Phase 4.8's lane, `skip_duplicate` / `skip_processed` → neither. "There is no second pipeline" means exactly that — a backlog row is not evidence the user was in the room, and a sweep that walked its rows straight into Phase 4 would put other people's meetings on the user's book at scale, which is the one thing Phase 4.8 exists to prevent.
+- The sweep returns TRANSCRIPT refs only. A `meeting` record whose ref names another namespace (a calendar id, a workspace-ingest pointer) is a real record with nothing for Phase 4 step 1 to fetch, so `unprocessed_backlog` never hands you one; `n_no_transcript` counts them, because an exclusion is a number and not a silence. If that count is persistently non-zero on a workspace whose transcript backend writes a different ref namespace, the prefix is what needs overriding — never the filter.
+- `n_backlog_remaining` is the honest counter. When it is non-zero the fire did NOT drain the backlog, and Phase 5's receipt must carry `window_incomplete_before` computed from `oldest_unhandled` (`catchup.receipt_window_marker(window, incomplete=True, oldest_unhandled=<the sweep's oldest_unhandled>)`). A receipt that omits the marker while a backlog is outstanding is the orphaning bug with a green receipt on it.
+- `start_naive: true` on a row means the stored start carried no offset, so the sweep read it BOTH ways and swept it if either landed in the window. That bias is deliberate: a re-swept meeting costs one dedup hit, a stranded one costs the meeting.
+- Never hand-roll this set from your own reading of events.jsonl.
 
 Up to 5 unprocessed meetings to process this fire.
 
@@ -106,14 +294,14 @@ Up to 5 unprocessed meetings to process this fire.
 
 **This is a STEP inside this same fire — there is NO new scheduled task, and this one is never re-registered** (re-registration is how the folder-rename defect class eats tasks).
 
-Ask the declared transcript backend for the same window a SECOND way: with the involvement filters OMITTED, so the return includes meetings the user never joined (a teammate's client call, a shared workspace session). Then classify and dedup in code — never by eye:
+Ask the declared transcript backend for the same window a SECOND way: with the involvement filters OMITTED, so the return includes meetings the user never joined (a teammate's client call, a shared workspace session). **The Phase 3 catch-up sweep's backlog rows are part of THIS set** — fetch each one's record by its `source_ref` and pass it in with the rest, so it is classified once, by the same code, alongside everything else. Then classify and dedup in code — never by eye:
 
 ```bash
 SESSION_DIR=$(echo "$CLAUDE_CODE_TMPDIR" | sed "s|/tmp$||"); PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d "$SESSION_DIR"/mnt/.remote-plugins/plugin_*/shared/scripts/chat_output_renderer.py 2>/dev/null | head -1 | sed 's|/shared/scripts/chat_output_renderer.py$||')}"; cd "$PLUGIN_ROOT"
 python3 -c "
 import sys, json; sys.path.insert(0, 'shared/scripts')
 from meeting_discovery import dedup_meetings, processed_index
-prior = processed_index('<workspace_root>')
+prior = processed_index('<workspace_root>', include_bare_meetings=False)
 print(json.dumps([{k: d[k] for k in ('source_ref','classification','classification_reason','certain','action','duplicate_of','note_owner')}
                   for d in dedup_meetings(<the raw meeting records from the backend>, processed=prior)]))
 "
@@ -123,6 +311,8 @@ What comes back, and what you do with it:
 
 - **`classification: attended`** (`captured_by_me` OR `listed_as_participant`) → the EXISTING pipeline, Phase 4 onward, completely unchanged. **Arriving shared is not evidence of absence** — many shared notes are of meetings the user did attend, and the classification reads the involvement flags, never how the note arrived. When the only note of an attended meeting is a teammate's, keep `note_owner` on the receipt so a transcript-quality caveat (someone else's capture settings) stays traceable.
 - **`classification: non_attendee`** (neither flag, INCLUDING "the backend did not say") → Phase 4.8's lane, never Phase 4. Participant metadata is incomplete by the backend's own admission, so **uncertain is non_attendee**: nothing auto-enters the user's book from that lane, which makes the cheap direction the default one.
+`include_bare_meetings=False` is load-bearing on THIS leg: a record is not a receipt, and the default (which the shadow lane keeps) would retire a meeting nothing has processed yet.
+
 - **`action: skip_duplicate` / `skip_processed`** → do not process, and record `duplicate_of` on the receipt. Dedup is on the MEETING, not the document: one real meeting can produce several notes with different document ids (the user's own note plus a teammate's shared note), and document-id dedup alone double-captures every shared meeting. The helper keys on the calendar event id when the backend exposes one, else normalized title + start within a tolerance window + participant overlap — and a recurring series never dedups across occurrences.
 
 Never hand-roll either verdict, and never re-derive the dedup key in prose: the fuzzy key is the thing that keeps a weekly recurring meeting from collapsing into one row, and it is tested (`tests/run_granola1_nonattendee_shadow_test.py`).
@@ -155,13 +345,22 @@ For each meeting:
        org_name='<the meeting resolved org name or None>',
        primary_thread_id='<resolved or None>',
        source_skill='past-meetings',
+       attendee_records=<THIS meeting's attendee list from Phase 4 step 1, or None>,
+       now_iso='<this fire UTC now, ISO>',
    )
    append_event('<workspace_root>/_hq/data/events.jsonl',
                 routed['book'] + routed['review'] + routed['observed'],
                 holder='past-meetings.commitments')
    print(json.dumps(routed['summary']))
+   print('\n'.join(routed['receipt_lines']))
    "
    ```
+
+   **⛔ ATTENDEE1 (2026-08-20) — PASS `attendee_records`, RENDER `receipt_lines`, CARRY `n_auto_created`.** The attendee list you already hold for this meeting is the strongest identity evidence this rail ever sees, and it was being discarded. Pass it in whatever shape the backend gave it (dicts with name+email, the connector's own `"A Name from Org <a@x>, …"` block, or plain strings) — `attendee_evidence.normalize_attendee_records` handles all three and PRESERVES the name↔email pair, which the persisted `meeting` event cannot (it splits emails into `data.attendees` and names into `data.attendees_external`, two lists with no correspondence between them, so re-reading the substrate later recovers nothing).
+
+   Effect: a capture whose counterparty or owner resolved to nobody, but whose name exact-normalizes onto an attendee OF THIS MEETING that carries an email, gets that person created and its id filled in before the pending stamp is evaluated — the row routes clean instead of joining the queue with a question the attendee list already answered. The bar admits nothing weaker: name-only attendee matches, one-token or annotated speaker labels, near spellings, and attendees of other meetings all fall through to the ordinary pending path unchanged, and a name the user set aside as "not a person" is never auto-created. At most 3 people per fire.
+
+   `routed['receipt_lines']` is one line per created person and printing it is MANDATORY — it names who was added, what it came from, what it unblocked, and that `undo` reverses the whole batch (record and drained rows together). An auto-creation with no receipt is the CAPTUREFLOW silent-drop class inverted. Carry `routed['summary']['n_auto_created']` onto the `meeting_processed` receipt with the other counts (it rides `capture_summary=routed` at step 9 automatically). Omitting `attendee_records` is legal and is exactly the pre-ATTENDEE1 behaviour: no records, no evidence, no writes.
 
    What the helper enforces, in ONE place, because none of it was enforced anywhere before: the **capture floor** (owner + concrete deliverable + consequence — stated in `meeting-notes/SKILL.md` since Stage D and never enforced, which is why a third of this rail's captures were discussed-only), the **cross-meeting fusion guardrail** (the verbatim check below, in code), and **party-only relevance scoping** (`capture_gate.classify_capture`, whose `party-only` default this rail had never consulted because no meeting writer called the gate). Its four outputs: `book` (ordinary open commitments), `review` (written `pending_review` so they land in the needs-your-call queue and never in the open book — BOTH fusion refusals, marked `data.fusion_unverified`, and below-floor captures, marked `data.floor_gated` with their `FLOOR_*` reason as `review_reason`), `observed` (`commitment_observed` — kept and searchable, no open item, no count, no row), `skipped` (near-empty since the ruling below; never narrated). **M RULING 2026-08-01 — below-floor captures are NEVER silently dropped.** They used to be, and the review measured what that cost: on the audit's own hand-judged sample the floor destroyed a real promise for every junk capture it stopped, with no event, no counter and no row left behind. The floor's verdict is now a routing decision, so a wrong call costs one tap in the queue rather than a lost promise. The dated case routes to the queue too — the observed writer refuses dated/money items, and 'surfaces nowhere' was never an acceptable reading of a rail that says a dated item ALWAYS surfaces. Carry `routed['summary']['n_book'] + n_review` into the `meeting_processed` receipt's `extracted_count` / `pending_review_count`, and pass the whole return as `capture_summary=routed` on that same receipt (step 9) so the gates' own counts persist.
 
@@ -249,13 +448,13 @@ For each meeting:
    On success: cache the BRIEF_PATH + BRIEF_URL on the meeting record. Phase 6 Step 3 uses BRIEF_URL as the `artifact_link.url` (inside widget) AND as the Briefs-section link target (below widget). Single source of truth — no path drift.
 8. **Write canonical `meeting` event** (v2.14.19+ — REQUIRED, not optional) to events.jsonl. This is the authoritative record that the meeting occurred. **Construct via `meeting_capture.build_meeting_event()` (BUG-8244 — the one sanctioned constructor; hand-rolled dicts are how 4 incompatible attendee shapes shipped),** passing `brief_path` through the returned event's `data` before appending. Shape the builder produces: `{type: "meeting", ts: <meeting_start_local_ISO>, source_skill: "past-meetings", primary_thread_id: <resolved or null>, org_ids: [<the counterparty org(s) this meeting was WITH, when resolved — including an org this very run just created for the counterparty; NEVER the CEO's own org>], person_ids: [<all attendees resolved>], data: {title, source_ref: "granola:<meeting_id>", duration_min, brief_path, attendees: [<every invitee EMAIL from the calendar invite / backend metadata, verbatim, resolved or not — identity-reconcile corroborates merges from these and the backfill repairs history with them>], attendees_external: [<names not in entities.json>], meeting_type: <sales|internal_1_1|external|board|… — the same classification Phase 4.7's grading derives; ALWAYS stamp it here>}}`. Pass `source_had_attendees=True` whenever the backend listed ANY participants — an empty binding then stamps `data.binding_missing` for the audit instead of vanishing silently. `org_ids` matters even when `primary_thread_id` resolves: a sales call with a new prospect routes to the CEO's own product/GTM thread, which attributes the event to the CEO's org — leaving the prospect org structurally unlinked from the one event that should seed its pipeline record (the PIPE1 D9.1 live gap). Use `ts` = meeting START time per Granola's metadata, NOT the processing timestamp. `meeting_type` is a load-bearing read for the deal-signal detector (PIPE1 D9.1: `meeting_type: "sales"` on an org with no deal coverage proposes deal creation) — stamp it on every meeting event, not only graded ones. This event is what `tell me about <person>` and "when did I last meet with X" queries read from — without it, there's no canonical meeting record (only `meeting_processed` which is a status event, not a meeting event).
 
-9. **Write `meeting_processed` event** to events.jsonl with `meeting_id`, `processed_at`, `extracted_count`, `pending_review_count`. Build it with `meeting_capture.build_meeting_processed_event(..., capture_summary=routed)` — passing Phase 4 step 5's `route_meeting_captures` return stamps `data.capture_counts` = `{n_book, n_review, n_observed, n_skipped, n_floor_gated, floor_reasons, skipped_reasons}`, which is the ONLY record anywhere of what the admission gates did. `n_floor_gated` is the share of `n_review` the capture floor routed — a SUBSET of it, never added to it — and `floor_reasons` tallies which `FLOOR_*` condition gated each one; those two are what make the floor's tuning measurable, and without them a mis-tuned floor is undetectable and the acceptance re-measure has nothing to read. None of it goes in the chat card. Counts and reason tallies only — never a title. This is a SEPARATE event from #8 — `meeting_processed` records that THE ORCHESTRATOR processed this transcript (status), while `meeting` records that THE MEETING happened (data substrate). Both must exist.
+9. **Write `meeting_processed` event** to events.jsonl with `meeting_id`, `processed_at`, `extracted_count`, `pending_review_count`. Build it with `meeting_capture.build_meeting_processed_event(..., capture_summary=routed)` — passing Phase 4 step 5's `route_meeting_captures` return stamps `data.capture_counts` = `{n_book, n_review, n_observed, n_skipped, n_floor_gated, n_deduped, n_fusion_inert, floor_reasons, skipped_reasons}`, which is the ONLY record anywhere of what the admission gates did. `n_floor_gated` is the share of `n_review` the capture floor routed — a SUBSET of it, never added to it — `n_deduped` counts twin captures of one act that FLOOR3's collapse pass folded into a surviving row (never written, so no other count moves), `n_fusion_inert` counts written rows the fusion guardrail could NOT check at all (a transcript-less fire stamps every row it writes — see the guardrail section below; it cuts across all three lanes, so it is a subset of nothing and is never added to another count), and `floor_reasons` tallies which `FLOOR_*` condition gated each one; together they are what make the floor's tuning measurable, and without them a mis-tuned floor is undetectable and the acceptance re-measure has nothing to read. None of it goes in the chat card. Counts and reason tallies only — never a title. This is a SEPARATE event from #8 — `meeting_processed` records that THE ORCHESTRATOR processed this transcript (status), while `meeting` records that THE MEETING happened (data substrate). Both must exist.
 
 **Idempotency note:** if the orchestrator re-fires on a transcript that already has both events, skip the writes (use `source_ref` dedup). Do NOT write a second `meeting` event for the same Granola meeting_id.
 
 **Cross-meeting fusion guardrail (v2.14.19+ — REQUIRED; MECHANIZED 2026-08-01, CAPTUREFLOW A3):** a commitment's verbatim phrase (a 5+ word normalized substring of `data.evidence`, falling back to `data.title`) must actually appear in the transcript text of the meeting it is being attributed to. If it doesn't, the extraction has crossed meetings and the event is NOT written to the book — it is written `pending_review` with the reason "extracted phrase not in the source transcript", which lands it in the needs-your-call queue.
 
-**For commitments this is no longer your job: `route_meeting_captures` (step 5 above) runs the check** — `meeting_capture.fusion_refusal_reason` is the implementation, and passing the step-1 transcript as `transcript_text` is what arms it. Omitting the transcript leaves the check inert (skip-not-fail), so pass it. For DECISIONS, which keep their own write path, run the same test by eye before appending: same rule, same reason string, same outcome.
+**For commitments this is no longer your job: `route_meeting_captures` (step 5 above) runs the check** — `meeting_capture.fusion_status` is the implementation, and passing the step-1 transcript as `transcript_text` is what arms it. Omitting the transcript leaves the check inert (skip-not-fail), so pass it. **An inert run is now visible rather than silent:** every row written while the guardrail could not run carries `data.fusion_inert = true` and is counted as `n_fusion_inert` on the receipt, in every lane. It moves no row — routing still refuses only what the check positively establishes is absent — it stops the absence of a refusal from reading as a pass, which is how 20 of 131 audited captures came to sit on the book carrying evidence that was never verbatim from any transcript. For DECISIONS, which keep their own write path, run the same test by eye before appending: same rule, same reason string, same outcome.
 
 This guardrail addresses the v2.14.18 fresh-install bug where the extraction layer fused two same-topic meetings and wrote a commitment to the wrong source meeting via `data.source_ref`; the language in the evidence string was from the OTHER meeting's transcript. It stayed prose with no code and no test until CAPTUREFLOW, and the 2026-08-01 capture-load audit found a live capture whose evidence appears nowhere in its cited transcript — exactly the thing this paragraph says is impossible.
 
@@ -422,6 +621,12 @@ for r in results:
                 resolved_by=r['owner_id'],
                 evidence=evidence,
                 source_skill='past-meetings',
+                # PROVMINT1 — THIS transcript is what closed the commitment, and
+                # its ref is already in scope (the §6 fence above passes the same
+                # value as `transcript_source_ref`). A meeting id is a far better
+                # pointer than the surface receipt the writer would otherwise
+                # mint; this was one of the walk's four verified drop sites.
+                source_ref='granola:<THIS meeting id>',
             )
             if res['status'] == 'closed':
                 n_resolved += 1
@@ -624,16 +829,68 @@ How the lane routes, and why each way (nothing below reaches the open book):
 
 Best-effort, silent, and it never blocks the fire: on any error swallow it, append a `pack_run.data.errors[]` entry with `{"phase": "4.8_nonattendee_shadow", …}`, and carry on. Nothing from this phase is narrated in chat — Phase 6's surface is unchanged by it.
 
-# Phase 5 — Memory updates (silent per Rule 9)
+# Phase 5 — Memory updates + THE RECEIPT, written BEFORE the post (silent per Rule 9)
 
 Append to events.jsonl:
 - `connector_read` for Granola fetch
 - All extracted events (decisions, commitments, follow_ups) — high-conf flagged committed, low-conf flagged pending_review
 - `meeting_processed` per meeting
 - CRU resolution events (Phase 4.6) — already appended in Phase 4.6 itself; mentioned here for completeness of the audit trail
-- The fire receipt — **ONE call to the canonical receipt helper (`shared/scripts/receipts.py`, v4.5.2 R1); NEVER hand-roll the receipt JSON** (the hand-rolled `past_meetings`/`cr-past-meetings`/`lateness_tier` drift of FINDINGS F-49/F-50 P2c came from this file's old prose): `from receipts import log_receipt; log_receipt(WORKSPACE_ROOT, "past-meetings", fired_via=<the Phase 2.9 receipt_fired_via: manual|scheduled|catchup>, surfaced=n_meetings, duration_ms=elapsed_ms, late_tier=<the lateness tier when note/degrade, else None>, extra_data={"errors": [], "window_start": "<the Phase 3 window start>", "window_end": "<the Phase 3 window end>", "window_incomplete_before": <ISO of the oldest still-unprocessed meeting, per the Phase 3 batch-cap gate — OMIT the key entirely when the fire drained its window>, "n_stale_evidence_skipped": <the Phase 4.6 `cru_diag` total — EVORDER layer 3's refusals across every transcript this fire; write 0 rather than omitting it>, "telemetry": build_pack_run_telemetry(...)})` — `receipt_fired_via` is what Phase 2.9's helper returned, never guessed; the field name is `window_incomplete_before` and nothing else (`shared/scripts/catchup.py` `WINDOW_INCOMPLETE_FIELD` is the one spelling — an improvised synonym is invisible to the reader and re-opens the orphaning bug, the F-50 P2c class); telemetry silent per Rule 9
 
-**Carry the Phase 4.8 shadow report onto that SAME receipt** as `extra_data={"nonattendee_shadow": <the `counts` + `would_be` maps the phase printed>, …}`. This is the ONLY record of what the non-attendee lane would have done, and it is what the write-enable decision reads; the lane itself writes nothing, so a fire that drops these counts leaves the shadow run unmeasured. Counts only — never a meeting title, exactly as `meeting_processed`'s `capture_counts` keeps it. Write zeros rather than omitting the key: an absent key reads as "this fire had no lane", which is a different claim.
+**⛔ RECEIPT BEFORE POST (SPEC BRIEFFIX1 Item C, M's ruling 2026-08-09; SPEC EOD1 §4).** The receipt is written HERE and the surface posts in Phase 6, in that order, and the order is the point. Both orders lose something when a fire dies in the middle and they do not lose the same thing. Receipt-then-post leaves a receipt and no post — a state this product has always accepted and the next fire can see. Post-then-receipt leaves a NUMBERED surface on screen that the record cannot explain: the watchdog reads it as a fire that never happened, and every one-tap action on it resolves against an OLDER numbering, so a tap lands on whatever used to be at that position. That is the Bug #98 class with a wrong-close on top, and it happened on 2026-08-09.
+
+**This does NOT license stopping here.** The receipt is bookkeeping, not delivery. A turn that logs and never reaches Phase 6 is an incomplete turn — it is simply now an incomplete turn the record can SEE.
+
+**Why the receipt comes after Phase D rather than straight after Phase C:** it carries the capture leg's own window fields (`window_incomplete_before` above all), and those are only knowable once capture has run. Capture is still the fire's final WORK leg; the receipt is bookkeeping and the post is delivery. The read was frozen in Phase C and is not re-derived here.
+
+**ONE call, and it is the End of Day writer — never a hand-rolled receipt JSON** (the hand-rolled `past_meetings`/`cr-past-meetings`/`lateness_tier` drift of FINDINGS F-49/F-50 P2c came from this file's old prose). `end_of_day.log_end_of_day_receipt` wraps `receipts.log_receipt` and writes the SAME `pack_run` shape under the SAME `past-meetings` taskId, so every existing reader — the watchdog, `catchup_window`, `late_fire`, `usage report` — keeps working byte-for-byte:
+
+```python
+from end_of_day import log_end_of_day_receipt
+log_end_of_day_receipt(
+    WORKSPACE_ROOT, pack,                       # the Phase C pack, unmodified
+    fired_via=lateness["receipt_fired_via"],    # manual | scheduled | catchup — never guessed
+    duration_ms=elapsed_ms,
+    late_tier=lateness["tier"] if lateness["tier"] in ("note", "degrade") else None,
+    capture_leg={
+        "window_start": "<the Phase 3 window start>",
+        "window_end": "<the Phase 3 window end>",
+        # ISO of the oldest still-unprocessed meeting, per the Phase 3 batch-cap
+        # gate. OMIT the key entirely when the fire drained its window. The field
+        # name is `window_incomplete_before` and nothing else (catchup.py's
+        # WINDOW_INCOMPLETE_FIELD is the one spelling — an improvised synonym is
+        # invisible to the reader and re-opens the orphaning bug, F-50 P2c).
+        "window_incomplete_before": <ISO or omit>,
+        "n_meetings": n_meetings, "n_processed": n_processed, "n_skipped": n_skipped,
+        # EVORDER layer 3's refusals across every transcript this fire. Write 0
+        # rather than omitting it: an absent key reads as "this rail has no fence".
+        "n_stale_evidence_skipped": cru_diag_total,
+        "capture_counts": routed["summary"],
+        "held_routing": routed.get("held_routing"),
+        "n_held": routed["summary"].get("n_held", 0),
+    },
+    extra_data={"errors": [], "nonattendee_shadow": shadow_counts,
+                # SPEC EODLEDGER1 — on a degrade-tier fire this is the record
+                # that the day-close was DELIVERED rather than withheld, plus
+                # the tier's own `degrade_notice` text, which this surface no
+                # longer posts. `late_tier` alone can no longer tell those two
+                # states apart, because both of them are "degrade".
+                "catchup_read": pack["catchup"],
+                "telemetry": build_pack_run_telemetry(...)},
+)
+```
+
+The helper derives `confirm_ids` from the pack itself — the numbered map, in the order the surface numbers them — and carries the day-intent PROPOSAL. **Do not type that list by hand.** A surface that renumbers without rewriting the map is the wrong-close hazard, which is exactly why the derivation lives in code and takes the pack rather than a list.
+
+**Carry the Phase 4.8 shadow report onto that SAME receipt** (`extra_data={"nonattendee_shadow": …}`). This is the ONLY record of what the non-attendee lane would have done, and it is what the write-enable decision reads; the lane itself writes nothing, so a fire that drops these counts leaves the shadow run unmeasured. Counts only — never a meeting title, exactly as `meeting_processed`'s `capture_counts` keeps it. Write zeros rather than omitting the key: an absent key reads as "this fire had no lane", which is a different claim.
+
+The receipt is owed on **every completed fire**, including a degrade-tier fire (which since SPEC EODLEDGER1 posts a labelled catch-up read rather than a notice — the receipt logged before that change and it logs now; withholding it is the Bug #98 class) and a fire whose pack came back entirely empty (nothing to place is not an error).
+
+**The receipt's `data` shape did NOT change for any of this.** `log_end_of_day_receipt` still writes the same `pack_run` under the same `past-meetings` taskId with the same keys, `confirm_ids` is still derived from the pack in render order, and a numbered tap still resolves positionally — the coverage strip and the ledger sit ABOVE the numbered section and do not renumber it. Every existing reader (the watchdog, `catchup_window`, `late_fire`, the usage report, the week roll-up) keeps working byte-for-byte.
+
+**SPEC PERSONLOOP1 (2026-08-19) adds exactly one key, and it is additive:** `data.person_candidate_counts` — `{n_candidates, n_rows_blocked, n_top_rows_blocked, n_shown}` for the confirm block's person-candidate rows. COUNTS ONLY, never a name, the same discipline `capture_counts` keeps. The writer derives it from the pack, so there is nothing for this file to PASS. Numbering is unaffected: the candidate rows are APPENDED to `confirm_ids` after the slipped and confirm rows, so every number a pre-PERSONLOOP1 receipt handed out still points at the same row.
+
+⚠ **But there IS something for the fire to remember, and it is in Phase 6.0: the rows have to be RENDERED.** `n_shown` on this receipt asserts that they reached the screen, and `confirm_ids` numbers them whether they did or not — so a fire that skips the third section receipts a render that never happened, in the optimistic direction, and breaks its own numbering claim. This paragraph said "nothing for a fire to remember" when PERSONLOOP1 landed; that was true of the receipt and false of the render, and the second-eyes review (N-1) caught the gap. The render bullet is in Phase 6.0 and it is not optional.
 
 Append to staging_emissions.jsonl per .docx generated. Telemetry writes silently — no chat narration.
 
@@ -642,6 +899,72 @@ Append to staging_emissions.jsonl per .docx generated. Telemetry writes silently
 Drop any surfaced item the CEO has taught the system to stop showing (insight-generator Pass 14 → `_hq/data/surface-preferences.json`): `from surface_preferences import load_surface_preferences, is_suppressed`; keep an item only if `not is_suppressed(prefs, "past-meetings", item_class=<the item's class, e.g. "decision_needed"|"open_item">, entity_id=<meeting or person id>)`. Missing store → no-op. Hides the prompt only; the processed meeting + its captured substrate are untouched. Same filter every widget orchestrator applies.
 
 # Phase 6 — Post the chat turn (v2.10.8+ — renderer-driven, ENFORCED)
+
+## Phase 6.0 — WHAT THIS FIRE POSTS (SPEC EOD1 — read this before anything below)
+
+**The surface is the End of Day pack from Phase C. It is not a list of meetings.**
+
+Pre-EOD1 this phase posted one widget per fire listing every processed meeting with its pending sub-items. That is the pile M's ruling removes ("the client is never handed a pile"). Everything else in this phase — the renderer pre-flight, the ZERO-MANIPULATION CONTRACT, the transport, the links sections, the H2 opener rules — applies UNCHANGED to the new surface. Only what goes into `data_view` changed:
+
+- **The prose blocks** — the personified intro, `catchup["lines"]` (degrade-tier fires only) above everything, `alarm_lines` verbatim, then `coverage["lines"]` verbatim, then `score` (with its `ledger` line), `wins`, `tomorrow`'s intent half, `sign_off`, and on Monday the week roll-up — are the markdown half of the turn, composed in Phase C and posted here.
+- **The row-lists** — `slipped`, `confirm`, the confirm block's **person-candidate rows** (SPEC PERSONLOOP1), and the `tomorrow` confirm/change taps — are ONE widget through `widget_transport.render_and_persist`, numbered in the SAME order as the receipt's `confirm_ids`. The numbering is the receipt's; do not renumber, do not re-rank, do not drop a row to save space.
+- **The meetings this fire processed** contribute their `.docx` links to the `Meeting briefs:` section below and NOTHING ELSE. No meeting rows, no per-meeting sub-items, no counters widget. Their ambiguous items are already in the queue and reach the CEO through the `confirm` block on the next fire, under its cap.
+- **The development-read slot** (Monday) renders NOTHING. Not a heading, not a placeholder.
+- **Friday** posts a plain day-close. No hand-off line to the Friday Wrap.
+
+`data_view` for the row-list widget:
+
+```python
+data_view = {
+    "widget_mode": "all_batch_widget",
+    "source_skill": "end-of-day",   # W4 — stamped into every Apply-all tuple as src
+    "header": <the day-close header line>,
+    "sections": [
+        {"title": "Slipped", "count": pack["slipped"]["n_total"], "items": [<one item per pack['slipped']['rows'] row, in order>]},
+        {"title": "Needs your call", "count": pack["confirm"]["n_total"], "items": [<one per pack['confirm']['rows'] row, in order>]},
+        # SPEC PERSONLOOP1 — THIRD section, and ONLY when it has rows (see below)
+        {"title": "People the graph keeps missing", "count": pack["confirm"]["person_total"], "items": [<one per pack['confirm']['person_rows'] row, in order>]},
+    ],
+    "quick_read": <the score + ledger + sign-off lines, already computed>,
+}
+```
+
+**The third section — the person-candidate rows (SPEC PERSONLOOP1 §0-3).** `pack["confirm"]["person_rows"]` is built for you by `end_of_day.compute_person_candidates` (which reads `person_candidates.derive_candidates`) and is already on the pack you are holding — you compute nothing here and you derive nothing here. Each row arrives complete: `n` (the `pcand:` wire id), `name`, `context_tag`, `data`, and `actions` (`add person` / `same as [existing]` / `not a person`, from the one shared list). Render them verbatim, in order, LAST — after the `confirm` rows — because that is the order `end_of_day.confirm_ids_from_pack` already numbered them in, and the receipt is the authority.
+
+Three rules, and each one is the same rule the other two surfaces follow:
+
+- **DROP-EMPTY.** No `person_rows` → **no section at all.** Not an empty frame, not a heading, not an "all clear". This is the ordinary case on a healthy workspace.
+- **`count` is `person_total`**, the honest number of recurring unresolved names — not `len(person_rows)`, which the cap holds at 2. Same convention as the two sections above it.
+- **A closure verb is never added to these rows.** They carry exactly the three verbs the pack handed you; `mark done` / `drop` on a name is refused by `end_of_day.ROUTES` and would be a dead button. The row is a QUESTION about a person, not an item to close.
+
+Why this bullet exists at all: this file is the runtime for the 5 PM fire (`orchestrator-map.json` maps BOTH `past-meetings` and `end-of-day` here), so a row the pack computes and this text does not name is a row that never reaches the screen — while still being numbered into `confirm_ids` and receipted as shown. That is the CAPTUREFLOW root cause and the STAFFCUT buttonless-row class, and it is exactly what the second-eyes review caught here (N-1).
+
+**`count` is the block's HONEST TOTAL, not the number of rows below it** (SPEC EODLEDGER1). It renders in the section title — *"SLIPPED (41)"* — and it is `n_total`, never `len(rows)` and never `None`. Then print `pack["slipped"]["more_line"]` and `pack["confirm"]["more_line"]`, each verbatim, in the prose immediately after the widget, one line per section whose cap actually bound (an empty string means it did not). Between them the title says how many there are and the line says how many are on screen; before this build the section said 3 and meant 41.
+
+Item numbering across ALL the sections that rendered — slipped, then confirm, then the person-candidate rows — is continuous and matches `pack["confirm_ids"]` exactly. That list was derived from these same rows in this same order by `end_of_day.confirm_ids_from_pack`, and Phase 5 already recorded it. If what you are about to render does not match it, the fix is to render the pack's rows in the pack's order, never to renumber the receipt. **A section you decline to render is the one way to break this**, which is why the person-candidate bullet above is drop-empty rather than optional: `confirm_ids` carries an entry for every `person_rows` row, so if the pack has them and the widget does not, the numbering claim here is unsatisfiable and every tap past the confirm rows resolves against a row that is not on screen.
+
+**The empty day still posts.** Zero slipped, zero confirm AND zero person-candidate rows means no widget at all, and the prose blocks are the whole turn: the coverage strip, a score and its ledger line, whatever wins there were (or the one honest no-wins line), tomorrow, and the sign-off. Never improvise an "all clear" widget, and never pad an empty section. **The coverage strip renders on an empty day too** — "nothing closed" and "I could not look" are the two readings of an empty surface and the strip is what tells them apart.
+
+## Phase 6.2 — the tomorrow tap (SPEC BK1 writer, EOD1 caller)
+
+The `tomorrow` block's confirm/change taps arrive through `apply-choices` like every other verb. On confirm:
+
+```python
+from end_of_day import resolve_intent_confirm
+from day_intent import write_from_proposal
+res = resolve_intent_confirm(WORKSPACE_ROOT)          # refuses on a stale/absent map
+if res["ok"]:
+    write_from_proposal(WORKSPACE_ROOT, res["proposal"],
+                        origin="wrap",                 # the CEO tapped: it is stated now
+                        source_ref=res["source_ref"],  # session:<receipt id>:confirm
+                        source_skill="past-meetings")
+```
+
+**Pass the PROPOSAL, never a list of its texts.** `write_from_proposal` takes the resolver's output whole, so each item keeps the `commitment_id` it was drafted from and the morning brief can join tomorrow's stated intent back to the open book. The shape this replaces handed `write_day_intent` a plain list of the items' `text` values, which dropped every id on the way in — and it dropped them because this file used to instruct exactly that. The `for_date` comes off the proposal too: re-resolving "tomorrow" at write time files a tap that lands either side of midnight under the wrong day.
+
+`origin="wrap"` because a tap is the CEO's own word. The pre-confirm draft is `origin="proposed"`, exists transiently, and is NEVER written silently and NEVER rendered as a statement of fact — `load_day_intent` skips proposed rows by default, so a surface cannot render a guess as the CEO's intent by forgetting a flag. On "change", take the CEO's sentence and write it the same way (`write_day_intent(..., origin="wrap")`); do not merge it with the draft.
+
+---
 
 **Mandatory execution contract (v2.10.8+):**
 
@@ -684,26 +1007,19 @@ Every number ANY Phase 6 surface renders — the widget header counts, each meet
 
 **Step 2 — build data_view, render widget HTML, post via show_widget (v2.10.9+):**
 
+**The `data_view` is Phase 6.0's, not this snippet's history.** The shape below is the mechanics — the transport call, the persist dir, the name hint. The CONTENT is the End of Day row-lists (slipped + needs-your-call), in the pack's order, matching the receipt's numbering. The pre-EOD1 per-meeting `sections` is retired with the pile; `item_for_meeting` is no longer called from this phase.
+
 ```python
 # (Inside python3 -c body invoked after the Rule 22 preamble + cd "$PLUGIN_ROOT")
 import sys
 sys.path.insert(0, "shared/scripts")
 from widget_transport import render_and_persist
 
-data_view = {
-    "widget_mode": "all_batch_widget",
-    "source_skill": "past-meetings",  # W4 (Phase 3) — stamped into every Apply-all tuple as src; apply-choices dispatches on it statelessly (no 60-min fire-marker window)
-    # Window phrase comes from the Phase 3 result, never a hardcoded "last 24h":
-    # "last 24h" on a normal fire, "since <weekday>" when `extended` is true.
-    "header": f"Past meetings · {window_phrase} · {n_processed} newly processed, {n_reprocessed} re-processed, {n_skipped} skipped",
-    "sections": [{"title": None, "count": None, "items": [item_for_meeting(m) for m in meetings]}],
-    "quick_read": quick_read,
-    "save_confirmation": skipped_summary,    # e.g. "Skipped: Office painting plan, Self-call 'Command room update'"
-}
+data_view = <the Phase 6.0 data_view: source_skill "end-of-day", the two row-list sections in pack order>
 
 transport = render_and_persist(data_view=data_view, wrapper="fragment",
                                persist_dir="<WORKSPACE>/_hq/.system/widgets",
-                               name_hint="past-meetings")
+                               name_hint="end-of-day")
 # EW2+T (F-15): the transport runs the full validator chain (canonical
 # actions, data shape, leak scan, wrapper contract) and persists the sealed
 # render. Pass transport["html"] to mcp__visualize__show_widget as widget_code (persisted page bytes, verbatim) — never

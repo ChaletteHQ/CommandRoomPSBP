@@ -125,6 +125,15 @@ import confidence as _confidence
 # date. History is never rewritten; readers normalize.
 from event_time import event_time
 
+# SPEC PROV2 — identity comparisons on STORED source pointers route through
+# Layer A4's derivation, never a raw `==` (guard G30). Imported at MODULE level
+# so the projector's provenance folds cannot silently degrade; the lazy imports
+# inside `commitment_matches_source_ref` / `commitment_matches_thread_ref` are
+# left exactly as they are, so their documented fail-open branches keep their
+# shape (this import failing takes the whole module down first, loudly, which
+# is what those docstrings already ask for).
+from connector_adapters.provenance import dedup_key_of
+
 # Bilingual overlay (Spanish beta). Inert for English installs: when no non-en
 # language is active in the workspace, every accessor returns the English
 # default unchanged and accent-folding is a no-op. See shared/scripts/lexicon.py
@@ -875,6 +884,84 @@ def _events_files_sig(path: Path) -> tuple:
     return tuple(sig)
 
 
+def _twin_key_id(ev: dict) -> str:
+    """The identity two appends must SHARE to be one record: the EXPLICIT
+    `data.id`, or "" when there isn't one.
+
+    Deliberately NOT `_commitment_id`, whose seq-alias fallback returns the
+    single sentinel `commitment_seq_?` for any row with neither an id nor a
+    usable seq — collapsing on that would fold unrelated rows into one, which
+    is a far worse bug than the one this fixes."""
+    d = ev.get("data") if isinstance(ev.get("data"), dict) else {}
+    cid = d.get("id")
+    return cid.strip() if isinstance(cid, str) and cid.strip() else ""
+
+
+def _id_twin_key(ev: dict, index: int) -> tuple:
+    """Canonical-survivor ordering for two appends of ONE commitment id:
+    LOWEST seq wins. Mirrors `commitment_dedup._fold_sort_key` — the lowest seq
+    is the ORIGINAL record, the one whose id every closure, thread, widget and
+    sub-item already points at. Rows with no usable seq sort last (they cannot
+    be the original), then by append position, so the choice is total and
+    deterministic for any input order."""
+    seq = ev.get("seq")
+    if isinstance(seq, bool) or not isinstance(seq, int):
+        return (1, 0, index)
+    return (0, seq, index)
+
+
+def collapse_id_twins(open_evs: list) -> tuple[list, dict]:
+    """One commitment id is ONE record — SPEC INGESTDUP1 §D2.
+
+    THE DEFECT. `data.id` is minted unique (`cmt_<ulid>`) and the event gate
+    does no reads, so nothing stopped a writer appending the SAME commitment id
+    again. It happened: three `commitment` events, one id, one source_ref,
+    identical titles, 23 seconds apart, from one skill. The projection returned
+    THREE open rows for one promise and every count read three — and no
+    existing seam could see it:
+
+      * the capture-time duplicate check skips a match whose `commitment_id`
+        equals the new row's own id (`flag_suspected_duplicates`' self-match
+        guard), so an identical-id re-append passed through unflagged;
+      * `fold_suspected_duplicates` keys on `data.suspected_duplicate_of`,
+        which nothing had set — its own comment even notes "never remap onto a
+        later twin" while doing nothing about the twin.
+
+    A duplicate id is not a SUSPECTED duplicate for someone to adjudicate.
+    Adjudication is the right answer when two DIFFERENT records might be one
+    ask; here they are one record, twice, and no question needs asking. The
+    reducer owns that judgement (`reducer owns truth`): the lowest-seq append
+    is the record, the rest are ledger noise.
+
+    Read-side only. History is untouched — every append stays on disk exactly
+    as it was written, the same additive-only doctrine as every other fold in
+    this loader.
+
+    Returns `(kept, twin_seqs)`: `kept` in the input's own order, and
+    `twin_seqs` mapping each survivor's id to the ABSORBED appends' seqs, so
+    the caller can stamp the survivor and the collapse is never silent. Rows
+    with no explicit `data.id` are always kept — the absence of an id is not an
+    id they share."""
+    evs = [ev for ev in (open_evs or []) if isinstance(ev, dict)]
+    best: dict = {}
+    for i, ev in enumerate(evs):
+        cid = _twin_key_id(ev)
+        if not cid:
+            continue
+        prev = best.get(cid)
+        if prev is None or _id_twin_key(ev, i) < _id_twin_key(evs[prev], prev):
+            best[cid] = i
+    twin_seqs: dict = {}
+    kept: list = []
+    for i, ev in enumerate(evs):
+        cid = _twin_key_id(ev)
+        if cid and best.get(cid) != i:
+            twin_seqs.setdefault(cid, []).append(ev.get("seq"))
+            continue
+        kept.append(ev)
+    return kept, twin_seqs
+
+
 def load_open_commitments(
     events_jsonl_path: str | Path,
     since_ts=None,
@@ -1197,8 +1284,16 @@ def load_open_commitments(
                         str(survivor), {"refs": [], "from": []}
                     )
                     for r in d.get("merged_source_refs") or []:
-                        if isinstance(r, str) and r and r not in entry["refs"]:
-                            entry["refs"].append(r)
+                        if not (isinstance(r, str) and r.strip()):
+                            continue
+                        # PROV2 — dedup the fold on the DERIVED identity so a
+                        # legacy lowercased ref and its case-preserved twin do
+                        # not both enter as separate provenance; each pointer
+                        # is still stored with its own bytes.
+                        if (dedup_key_of(r)
+                                in {dedup_key_of(x) for x in entry["refs"]}):
+                            continue
+                        entry["refs"].append(r)
                     if cid and str(cid) not in entry["from"]:
                         entry["from"].append(str(cid))
                     # SUB1 D3b: the merged-away item's children re-point to
@@ -1331,6 +1426,19 @@ def load_open_commitments(
                 if isinstance(pid, str) and pid.strip():
                     child_records.append((cid_ev, ev.get("seq"), pid.strip()))
 
+    # SPEC INGESTDUP1 §D2 — one commitment id is ONE record. Two appends of
+    # one id are the same promise written twice, not two promises, and this is
+    # where that is decided (see collapse_id_twins). The child-record filter
+    # matters as much as the row fold: a sub-item whose id was appended twice
+    # registered twice against its parent, so `n_subitems_open` counted one
+    # child as two and the parent's "all sub-items done" signal could never
+    # fire.
+    open_evs, id_twin_seqs = collapse_id_twins(open_evs)
+    if id_twin_seqs:
+        _kept_child_keys = {(_commitment_id(e), e.get("seq")) for e in open_evs}
+        child_records = [r for r in child_records
+                         if (r[0], r[1]) in _kept_child_keys]
+
     def _closed_here(cid: str, seq) -> bool:
         """Closed iff the LATEST closure (id chain or F3 seq alias) comes
         after the LATEST reopen (Stage D undo) — delegated to the shared
@@ -1384,6 +1492,15 @@ def load_open_commitments(
         if _closed_here(cid, seq):
             continue
         patch: dict = {}
+        # INGESTDUP1 D2 — never silent: the surviving row says how many appends
+        # of itself it stands for, and `surface_drivers._dup_fold_note` renders
+        # it. Same contract as `duplicate_fold_count`.
+        twins = id_twin_seqs.get(cid)
+        if twins:
+            patch["id_twin_count"] = len(twins) + 1
+            patch["id_twin_seqs"] = [s for s in twins
+                                     if isinstance(s, int)
+                                     and not isinstance(s, bool)]
         upd = due_updates.get(cid)
         if upd:
             # In-memory copy with the EFFECTIVE due — data.due is first in
@@ -1491,7 +1608,14 @@ def load_open_commitments(
             if _reason:
                 try:
                     from review_reasons import review_reason_still_holds
-                    if not review_reason_still_holds(_rr_ws, _reason, _rr_cache):
+                    # PERSONLOOP1 §0-5 — the capture event travels WITH the
+                    # clause. `no resolved owner` is stamped bare and names
+                    # its subject on the row (`data.owner_external`), so a
+                    # row-blind verdict can never drain it. Passing `c` (the
+                    # capture, pre-patch) is what makes the grandfathered
+                    # rows checkable at all.
+                    if not review_reason_still_holds(_rr_ws, _reason,
+                                                     _rr_cache, row=c):
                         patch["pending_review"] = False
                         patch["review_reason_auto_satisfied"] = True
                 except Exception:
@@ -1521,7 +1645,12 @@ def load_open_commitments(
             # provenance — every source_ref except its own primary one, plus
             # the superseded ids. In-memory copy only.
             own_ref = (c.get("data") or {}).get("source_ref")
-            refs = [r for r in merged["refs"] if r != own_ref]
+            # PROV2 — "every source_ref except its own primary one" is an
+            # identity question; compared raw, a case-variant spelling of the
+            # survivor's own ref would survive the filter and read as absorbed
+            # provenance the survivor never absorbed.
+            refs = [r for r in merged["refs"]
+                    if dedup_key_of(r) != dedup_key_of(own_ref)]
             if refs:
                 patch["merged_source_refs"] = refs
             if merged["from"]:
@@ -2577,7 +2706,16 @@ def match_transcript_to_commitments(
         # §6 layer 1 — a transcript can never corroborate a conclusion about
         # an item it created. Dropped before scoring, so the row is NEVER
         # CREATED rather than created-then-suppressed.
-        if own_ref and own_ref in commitment_source_refs(ev):
+        #
+        # PROV2: this was a RAW `in` against the candidate's stored refs, and a
+        # raw membership test stops seeing a self-match the moment one side is
+        # a legacy lowercased ref and the other a case-preserved pointer. It
+        # now asks the same question Paths 1 and 4 ask — through
+        # `commitment_matches_source_ref`, which compares derived keys — so the
+        # derivation has one home and every send-scoring path inherits it
+        # (the F-54 no-resurface-derivation rule). Over-matching here EXCLUDES a
+        # candidate, which is the fail-SAFE direction this consumer documents.
+        if own_ref and commitment_matches_source_ref(ev, own_ref):
             continue
         # §6 layer 2 — same-fire siblings share one extraction context, so
         # they are one source. An unparseable capture ts fails SAFE (the item
@@ -3395,6 +3533,19 @@ def _now_iso() -> str:
     return _clock_now().replace(tzinfo=None).isoformat() + "Z"
 
 
+def _close_pointer_fields(source_ref=None) -> dict:
+    """PROV1 — the pointer fragment for the close-family SHAPE HELPERS below.
+
+    Delegates to the Layer A4 writer contract
+    (`connector_adapters.provenance.close_provenance_fields`), so a dict built
+    here and a dict written by `commitment_state` carry the identical field —
+    a shape helper that produced a DIFFERENT provenance spelling from the real
+    writer would be a second, silently-diverging contract.
+    """
+    from connector_adapters.provenance import close_provenance_fields
+    return close_provenance_fields(source_ref)
+
+
 def build_commitment_resolved_event(
     *,
     commitment_id: str,
@@ -3403,6 +3554,7 @@ def build_commitment_resolved_event(
     source_skill: str,
     evidence: str,
     next_seq: int,
+    source_ref=None,
 ) -> dict:
     """LEGACY shape helper (pre-Stage-B). Build a `commitment_resolved` event
     dict per shared/COMMITMENT_SCHEMA.md.
@@ -3412,6 +3564,11 @@ def build_commitment_resolved_event(
     normalization, loud no-match refusal, full-set idempotency, pending_review
     floor, gated append). Do not build-and-append with this helper in new
     code; it remains only for shape reference and pre-Stage-B callers/tests.
+
+    PROV1 — it still carries `source_ref`, and still stamps
+    `provenance_missing` without one. A close-family SHAPE that cannot express
+    a pointer is a hole in the contract even when nothing in production calls
+    it: the next caller copies the shape, not the docstring.
     """
     return {
         "seq": next_seq,
@@ -3423,6 +3580,7 @@ def build_commitment_resolved_event(
             "commitment_id": commitment_id,
             "resolved_by": resolved_by,
             "evidence": clip(evidence) if evidence else "",
+            **_close_pointer_fields(source_ref),
         },
     }
 
@@ -3435,10 +3593,29 @@ def build_commitment_updated_event(
     change_summary: str,
     evidence: str,
     next_seq: int,
+    source_ref=None,
 ) -> dict:
     """Build a `commitment_updated` event for schedule-shift cases. The
     underlying commitment stays OPEN; this event records that the deadline
     or scope changed.
+
+    PROV1 §3.1 — this is THE `commitment_updated` that asserts an EXTERNAL
+    FACT ("they pushed the deadline to the 14th", read off an email or a
+    transcript), so it carries the same pointer contract as the closers.
+    `source_ref` names the message or meeting the new date came from; without
+    one the event lands stamped `provenance_missing: true` — this LEGACY
+    shape-builder is not one of PROVMINT1's three floor writers and genuinely
+    still stamps the marker. The park/un-park updates (`watch_gate`) and the
+    record-keeping ones (wording edits, owner confirmations) assert nothing
+    external and are deliberately outside the contract.
+
+    REVIEW-FLAG CLEARS ARE NO LONGER IN THAT LIST (PROVMINT1 §0-2, which
+    changed this answer). A Keep-both adjudication asserts an EXTERNAL fact —
+    "these two really are different things" — so
+    `commitment_state.clear_review_flags` is INSIDE the pointer contract: it
+    takes a `source_ref`, and mints `session:<source_skill>:<now>` with
+    `ref_grain: "surface_minted"` when nothing reaches it. Read that
+    docstring, not this sentence, for what a review-flag clear writes.
     """
     return {
         "seq": next_seq,
@@ -3450,6 +3627,7 @@ def build_commitment_updated_event(
             "commitment_id": commitment_id,
             "change_summary": clip(change_summary) if change_summary else "",
             "evidence": clip(evidence) if evidence else "",
+            **_close_pointer_fields(source_ref),
         },
     }
 
@@ -3681,6 +3859,7 @@ __all__ = [
     "detect_new_ask_signal",
     "detect_scheduling_intent",
     "load_open_commitments",
+    "collapse_id_twins",
     "split_pending_review",
     "load_needs_review",
     "load_open_review_proposals",

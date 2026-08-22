@@ -1,5 +1,355 @@
 # Command Room — Changelog
 
+## v5.13.2 — 2026-08-22 — Release notes say what a client will actually see
+
+**Notes only — no code changed.** Cut after the 2026-08-22 pre-push walkthrough of v5.11.1 → v5.13.1 (findings record in the operator workspace), before the fleet fan-out. Three announcements were missing and one claim was not yet true.
+
+### What the notes now say
+
+- **The morning list gets much shorter, and nothing was removed** (added to the v5.13.0 note, where the change is announced). The list-length drop is the number a reader notices first; the note had reassured about the owed-by-you counts instead, which move the other way.
+- **Run Now declines a second delivery of a served slot** (new, v5.13.2). The served-slot skip shipped in the unannounced window between the v5.12.0 and v5.13.0 cuts; a Run Now press is labelled as a scheduled fire and refused. The typed phrase is the way to a fresh render until the skip is bounded.
+- **The first health check after updating may report chats as "ran but didn't record"** (new, v5.13.2). Observed on the operator workspace minutes after `update command room` rewrote six prompts; no chat had a slot that day and receipts existed for the prior one.
+- **The first weekly review-expiry pass may be large** (new, v5.13.2), because a workspace coming from v5.11.1 has never had one.
+- **Removed** from the v5.13.1 day-close note: "The close also accounts for your open book: what came on it, what came off." The accounting block reports the book as it stood before the fire's own capture and close legs ran (observed: `0 opened, 0 closed` on a fire that captured 15 and closed 1). The claim returns when the block is fixed.
+
+### Files touched
+
+`.claude-plugin/plugin.json` (5.13.1 → 5.13.2), `shared/releases/v5.13.0.json` (one passage added to the brief item), `shared/releases/v5.13.1.json` (one sentence removed from the day-close item), `shared/releases/v5.13.2.json` (new, three `announce_only` items), this file.
+
+### Customer migration impact
+
+None. Announcements only. A client coming from v5.11.1 plays the v5.12.0, v5.13.0, v5.13.1 and v5.13.2 manifests in order on `update command room`.
+
+### What's NOT in this ship
+
+The defects the notes describe — the Run Now refusal (the served-slot skip applies to any fire labelled scheduled), the day-close accounting ordering, the post-update health-check false alarm — are captured, not fixed. Fixes ride the next trains. Nothing in the walk blocked the fan-out.
+
+## v5.13.1 — 2026-08-21 — The held pile drains itself, the day-close says what it read, and a name already in your invite stops becoming a question
+
+### ATTENDEE1 — when the invite already says who someone is, you stop being asked
+
+**A capture that names somebody the workspace cannot place now checks the meeting's own attendee list first. If that list carries their full name and their email address, the contact is created and the capture files itself clean — with a line telling you it happened and `undo` to take it back.**
+
+PERSONLOOP1 turned every unplaceable name into a question, and that was the right call: a name lifted out of a transcript is a guess, and a guess must never become a permanent contact record on its own. But some of those questions had a printed answer sitting one field away. A calendar or Granola attendee record giving a person's full name *and* their email address is not a guess about who was in the room — it is the strongest identity evidence this workspace ever gets, and it was being thrown away at the moment it would have been most useful, so the same identity came back later as a question instead.
+
+**What now happens.** When a capture's counterparty or owner cannot be placed, and that name matches — exactly, allowing only for capitalisation and spacing — an attendee of *that same meeting* whose record carries an email address, the contact is created and the capture routes straight onto your book instead of into the queue. One line on the fire's receipt says who was added, what it was taken from, how many waiting captures it cleared, and that `undo` reverses the lot. At most three people per run, so a long backlog drains over days rather than filling your contacts in one pass.
+
+**The same evidence also answers questions already on the board.** A name the queue has been asking about, whose attendee record settles it, is answered for you and shown as a receipt line rather than a question. The bar for that is identical, and the recurrence rule is untouched — a name heard on one call is still not something you get asked about.
+
+**Everything weaker still asks.** This is the part worth reading, because the bar is narrow on purpose:
+
+- **No email, no contact.** An attendee list that gives a name but no address proves nothing that the transcript did not already say. Those go back to being a question, exactly as before.
+- **No near matches.** One letter off is a different name. Nothing here guesses at a spelling, and nothing sounds names out.
+- **This meeting only.** Someone who attended a different call has no bearing on this capture.
+- **A label is not a name.** "Speaker 2", a lone first name, anything with a number or a bracket in it — the source telling you it did not know who was talking.
+- **A name you have set aside stays set aside.** If you have said "not a person" about a name, it is never created, whatever the attendee list says. Your no outranks the evidence.
+- **A first or last name you already have on file becomes a question, not a merge.** Nothing here decides that two people are the same person.
+
+**And it is one `undo`.** Taking it back archives the contact — never deletes it, and the history stays intact — and puts back the captures that cleared, in a single reversal.
+
+Nothing changes on a run that has no attendee list to read: same captures, same queue, same wording. This is additive to what your workspace already holds; nothing needs re-running and nothing needs repairing.
+
+### PERSONLOOP1 — the workspace learns a person from a meeting, and the waiting pile drains itself
+
+**When the same name keeps failing to resolve, you now get asked once — and answering it clears every capture that was stuck behind that name.**
+
+This is the largest single cause of a long "needs your call" list, and until now it could only grow. A capture whose person the workspace cannot place is held for your confirmation. Nothing ever offered to add that person, so the same handful of names failed to resolve meeting after meeting, and every meeting that mentioned one of them added more held captures — none of which could ever clear, because clearing them required the contact that nobody was ever asked to create.
+
+Three things change.
+
+**A recurring unresolved name becomes one question.** When a name has failed to resolve across **two or more different calls**, the queue offers it — with the number of captures currently waiting behind it, and every spelling the transcripts used. Two answers add them; one sets the question aside. The offer appears in three places you already look: the top of `needs your call`, the staff meeting, and the End of Day. It is capped at two names per showing, and it is absent entirely when there is nothing to ask.
+
+**Answering it clears the backlog in the same breath.** Adding the contact saves every observed spelling as an alias — so a name a transcript keeps misspelling resolves correctly from then on — and then clears every held capture that was waiting on that name. The reply says how many: *"Added them — 9 waiting captures cleared."* If the name is somebody you already have, "same as" saves the spelling against that record and clears the same backlog.
+
+**Captures held for an unknown OWNER now clear too.** Two different held-capture wordings point at a missing person: one names the person in the sentence, the other says only that the owner could not be placed. The second kind — the larger half — could never clear, even after the person was added, because the name it was about was recorded on the row rather than in the sentence. It reads the row now, so the whole backlog drains on one answer instead of half of it. This applies to captures already sitting in your workspace, not only to new ones: nothing needs re-running and nothing needs repairing.
+
+Three things this deliberately does not do:
+
+- **It never adds anybody on its own.** A contact is a permanent record; creating one from a transcript's spelling would put a misspelling in your workspace as a real person. Every one of these is a question with a button, never a change that already happened.
+- **It never asks about a one-off.** One unresolved name on one capture is noise, and the queue stays quiet about it.
+- **"Not a person" stops the suggestion and nothing else.** Captures that mention the name keep being captured exactly as before. If you want a name to stop being suggested, that is all this does — it is not a way to stop tracking someone.
+
+### REVSCHED1 — the unconfirmed pile drains itself, and there is a way back through your own undo
+
+**The bulk clear for unconfirmed captures now gets offered where you can see it, runs once a week on its own, and has an explicit way to reach rows you previously put back.**
+
+The drain shipped correct and unreachable. It worked only if you remembered one phrase, and nothing anywhere reminded you it existed. On one real workspace over seventeen days, 224 captured guesses produced three answers — not because the verb was broken, but because a drain nobody is reminded of is a landfill one level up.
+
+Three things change.
+
+**It gets offered.** When ten or more unconfirmed captures have gone unanswered past the window, one line appears — under the needs-your-call queue header, and under the backlog digest — naming the count, the window and the phrase. Below ten the pile is workable row by row and no line appears at all. Same shape and the same bar as the existing offer for the quiet confirmed pile, and both surfaces print the same sentence from the same place, so they can never offer two different things.
+
+**It runs weekly on its own.** Once a week the workspace lapses whatever has gone unanswered past your window, in one reversible batch, and says so in one line at your next day-close or staff meeting: how many lapsed, that `undo` puts them back, and `needs your call` for what remains. A week with nothing to clear is silent. Nothing about the confirmed pile is in reach — real, agreed work is never touched by this, and the bar and the floor are exactly what they were. It rides the background maintenance task you already have, so there is nothing to set up and nothing new in your Scheduled list.
+
+**And `undo` no longer locks the door for a fortnight.** Putting a batch back counts as activity on every row in it, which is right — the same phrase should not immediately re-clear what you just rescued. The cost was that an exploratory clear-and-undo held those rows out of the bulk verb for a full window: on 2026-08-19 one `undo` of 106 rows meant the next run could reach 21 of the 86 that were over the bar. There is now a separate phrase for it — say `review amnesty including what I un-did` and it measures how long each row was quiet *before* you un-did it. Anything you have genuinely touched since — re-worded, re-dated, re-owned, chased, answered — is still left alone, and the confirm sentence says out loud that the run reaches rows you put back. It is never the default and never inferred.
+
+`expire the review pile past 30 days` also routes now. The window in that sentence was an honoured setting from the day the verb shipped, but the word `expire` appeared in no skill description anywhere, so the phrase reached nothing.
+
+The applied receipt says how many actually closed, how many were held back because they own smaller open pieces, and how many were shielded by an earlier undo — each read off what the writer returned rather than inferred from a subtraction.
+
+### INGESTDUP1 — the same promise stops taking up two lines
+
+**Two ways one commitment could occupy two lines of your open book are closed. Neither of them was the way anybody expected.**
+
+A promise captured twice — once from the call, once from the follow-up, once from a re-run of the same day — has been detected and offered to you as a single question since the duplicate check shipped, and a read-only check against a real workspace confirmed that part works: both of the duplicate pairs that prompted this work had already been caught, flagged, and folded into one line. What had not been caught were two quieter cases. Both are the kind that never announce themselves.
+
+**A person written two ways stopped counting as one person.** Different parts of the product record who owes a promise differently — most write the contact, some older ones write the name. When one capture said the contact and the other said that same person's name, the check compared the two spellings, saw two different values, and concluded the two promises were owed by two different people. That ends the comparison immediately, however identical the rest of it is. One pair in a live open book matched word for word and had never been offered, for that reason alone. Both sides are now read the same way, and a name is looked up against your contacts and their known spellings before the two are compared. A name your workspace does not recognise still counts as unknown — it is never guessed at, because a guess here would join two promises that are not the same one.
+
+This deliberately does **not** widen the rare case where a duplicate is merged without asking. That still requires the contact on both sides, written as a contact. A name the product had to look up earns a question, never a silent merge.
+
+**And two copies of one record are one line again.** Every commitment gets a permanent identifier when it is written, and identifiers are unique — so nothing ever checked whether one was being written twice. When it happened, the same promise appeared as two open lines and every count on every surface read two. No existing check could see it: the duplicate detector skips anything whose identifier matches the row it is looking at, and the fold that collapses duplicates on screen needed a flag that nothing had set. Your open book now treats one identifier as one record — the original line survives, later copies are absorbed into it, and the surviving line says how many times it was written. Nothing is deleted: every write stays in the record exactly as it happened, and the integrity check now reports any identifier written more than once, so the writer doing it can be found rather than papered over.
+
+A sub-item written twice also stops counting twice against the item it belongs to.
+
+### Internal — no customer-visible change
+
+- **PERSONLOOP1 internals.** New `shared/scripts/person_candidates.py` — live derivation (never cached to substrate), the one row shape all three surfaces render, and `resolve_candidate`, the one write path for an answer (entity write, then `needs_review_queue.confirm_satisfied_reasons` for the durable clear, then the count). The derivation is TWO passes and the split is load-bearing: recurrence is counted off the capture history (the record of which meetings the graph failed on) and urgency off the open pending projection (what is stuck right now, and a candidate must block at least one row). Measured read-only against the workspace the spec was written for, a pending-only derivation is degenerate — the open pending set held 16 distinct unresolved names and not one reached two distinct source refs, because the queue is drained continuously while the failures stay in history. `review_reasons.clause_still_holds` / `review_reason_still_holds` take an optional `row`, and `no resolved owner` joins the checkable classes as a ROW-AWARE class reading `data.owner_external` — chosen over enriching the capture stamp because row-awareness covers the already-stamped rows and the future ones through ONE code path, with no stamp-text change and no migration. New event type `person_candidate_suppressed` (registered in `events.schema.json` + `EVENT_TYPES.md` with its named consumer): per-name-per-org, idempotent, read only by the derivation — no capture path imports the module. New verb `not a person` in `verb_taxonomy`; `add person` / `same as [existing]` gain the three new surfaces. Statuses classified in `apply_audit` (G35). Telemetry rides the End of Day receipt as `person_candidate_counts` (counts only, never a name). New suites `tests/run_personloop1_test.py` (8 sections) + `tests/run_personloop1_mutation_test.py` (21 mutations: the propose-only fence, the ignore-vs-capture fence proved by INSERTING the forbidden coupling, the drain, the bar, the grouping, the surfaces, and the instruction layer).
+- **REVSCHED1 internals.** `commitment_backlog_sweep.REVIEW_OFFER_AT` (10, mirroring `AMNESTY_OFFER_AT`) plus `review_offer()`, a pure read that never refuses and resolves the primary user itself — both the digest and `needs_review_queue.build_queue_view` (new `offer` field, carried to the widget path as the renderer's own `sub_header`) read the bar and the wording from it. It does ONE candidate derivation rather than going through `review_expiry_plan`, which on a closed-door plan derives twice and builds a preview and a confirm sentence the offer never uses — this runs on a daily surface. The window comes from a new `_resolve_review_threshold()` shared with the plan, so the offered count and the verb can never disagree about the configured `review_expiry_days`, and the floor is applied so a workspace configured below it gets no offer rather than one the verb would refuse. The door is `include_reopened` on `review_expiry_candidates` / `review_expiry_plan` / `apply_review_expiry`, keyword-only and default False on all three, implemented by passing `MOVEMENT_EVENT_TYPES` minus `commitment_reopened` through `derive_commitment_movement`'s existing `movement_types` parameter — by subtraction, so a movement type added later is honoured the day it lands. `last_activity_map` gains an optional `movement_types` passthrough; its default is byte-identical, so `age_out_candidates` and `ingest_kill_candidates` are unchanged. The schedule is a JOB (`maintenance_dispatcher.MAINTENANCE_JOBS["review-expiry"]`, nominal `0 17 * * 0`, ordered last of the Sunday group because it argues from silence and must read what every other Sunday leg has finished writing), not a task: it rides the already-authorized `maintenance` taskId, registers nothing per machine, and is therefore structurally out of reach of `load_schedule_config`'s renamed-predecessor override carry-over — the seam that inherited `enabled: false` onto the end-of-day task on 2026-08-19. Entry point `run_review_expiry_job(ws, apply=True)` / `commitment_backlog_sweep.py review-expiry --apply`; receipt id `review-expiry` (`pack_run`), written on an empty plan too because the receipt is the dueness signal. New gate `tests/run_revsched1_test.py` plus `tests/run_revsched1_mutation_test.py`, which proves the scheduled path's confirmed-tier membership fence and the door's default-OFF gate by mutating a discarded copy of the plugin tree — the live tree is never touched, so the battery stays deterministic at any worker count. The membership proof is a widened/widened-plus-unfenced PAIR, because plan and tier come from one derivation today and removal alone is unobservable. The base gate keeps a section exercising the exact command line the registered prompt types (a prompt whose command line is wrong fails silently every Sunday with a receipt nobody writes). A `fired_via` value the receipt ledger cannot record is REFUSED before any write (known aliases still normalise and fire): the job stays due and self-heals at the next scheduled fire, rather than stamping a fire nobody can vouch for as a manual run.
+- **INGESTDUP1 internals.** Diagnosis first: a read-only replay over the live open book (415 rows, zero writes — hashes verified before and after) classified 14 near-duplicate title clusters and ruled the spec's expected build target ALREADY BUILT. Both live pairs named in the spec were flagged at capture by the v4.6.0 C4 seam (`suspected_duplicate_of` set, `pending_review` true) and folded to one row by `fold_suspected_duplicates`; no second seam was added, and `supersede_commitment` plus the backlog-sweep grouping were left alone. What the replay found instead: (D1) `commitment_dedup.score_suspected_duplicate`'s owner gate read the new side through a bare `new_data.get("owner_id")` and the open side through `_commitment_field(ev, "owner_id")`, whose alias ladder `("owner_id", "owner_person_id", "owner")` ends in a legacy key holding a free-text NAME — so `str(a) != str(b)` hard-vetoed one person written two ways, killing the comparison before the title gate. New `commitment_dedup.owner_signal` reads both sides through the one ladder and resolves a name through `commitment_parties.resolved_entity_ids` (the exact-only alias graph, newly exported for the `meeting_ref_keys` reason rather than re-derived); differing raw spellings that neither resolve still veto, and `workspace_root` threads through `score_suspected_duplicate` / `find_suspected_duplicate` / `auto_merge_eligible` / `find_auto_merge` from `flag_suspected_duplicates`, which already had one. The AUTO tier calls `owner_signal` with NO workspace_root — native resolved ids only, deliberately not the flag tier's resolution, so a resolved name falls through to a question. (D2) `data.id` is minted unique and the event gate does no reads, so a re-append of one id became N open rows: `flag_suspected_duplicates`' self-match guard skipped it and the render fold keys on a flag nothing set. New pure `cru_match.collapse_id_twins` folds the projection to one row per explicit `data.id` (lowest seq survives, mirroring `_fold_sort_key`), keyed on the explicit id and NOT on `_commitment_id` — whose seq-alias fallback returns the single sentinel `commitment_seq_?` for any row with neither id nor seq, and collapsing on that would fold unrelated rows together. `child_records` is filtered to the survivors in the same breath (a doubled sub-item was counting twice against its parent's `n_subitems_open`, so the all-done signal could never fire). Never silent: the survivor carries `id_twin_count` / `id_twin_seqs`, read by `surface_drivers._dup_fold_note`, and `integrity_check` gains `C19.commitment_id_reappended` (WARN) so a projection fold cannot hide the writer. Verified read-only on the live book afterwards: 415 open rows → 413, zero duplicate ids remaining, and the proven victim pair now scores 1.0 and flags with a workspace_root while still returning None without one. New suites `tests/run_ingestdup1_test.py` (46 checks) + `tests/run_ingestdup1_mutation_test.py` (11 mutations against a discarded tree copy, including the auto-tier WIDENING as its own pin — the conservative choice is fenced, not merely made).
+- **`run_commitment_backlog_sweep_test.py` NN6 sharpened, not relaxed.** The fence demanded the literal sentence "never scheduled" in the skill, which REVSCHED1 makes false. It now pins the invariant the fence actually protects — the skill owns no scheduled task, the drain's id is in `MAINTENANCE_JOBS` and in neither `DEFAULT_SCHEDULES` nor `SILENT_TASKS` — plus the prose naming where the weekly run lives. The banned-token loop and the registration-surface sweep are untouched.
+- **`run_task_watchdog_test.py` job roster now derives from the live registry** rather than restating it, in addition to the explicit list — the hand-typed copy is what went stale.
+
+- **MAILFLOOR1 — the End of Day fire states how far back it reads Sent mail.** Phase A of `orchestrator-past-meetings.md` handed the reconcile call "the Sent batch you just fetched" and never said how wide that fetch should be, while the cursor writer advances to the newest message in whatever batch it is handed. A fire that fetched only the current day after a gap would therefore have advanced the cursor past unread sends and stranded them permanently, with a green receipt. Phase A now carries the same three branches `reconcile-sent` Step 1 already gives — first real run, manual catch-up, and the cursor-dated intent with its overlap — plus the reason an over-wide window is safe, and one line naming where the chat leg's window comes from. `reconcile-sent` Step 1 gains the reciprocal path reference; its windows and rules are unchanged. No code changed: `reconcile_sent_commitments.py` is byte-identical and its cursor semantics are correct as they stand. New gate `tests/run_mailfloor1_sent_fetch_floor_test.py` (39 checks) pins the two texts equal, proves the paragraph reachable from the file the registered task actually loads, and is proved failing by both deleting the paragraph and moving the 30-day figure in one file only. No behavior change on a correctly-firing workspace, so nothing above the line.
+
+### WINSFLOOR1 — the day-close stops counting the whole history as today
+
+**On a day with no morning brief, the day-close now counts what moved since midnight instead of reading the whole history, and says which window it used.**
+
+Your evening close measures the day from that morning's brief. When no brief fired — a hand-briefed workspace, a missed schedule, a day off the usual rhythm — there was no starting point to measure from, and the block that names what moved read **everything the workspace had ever recorded** and reported it as today's. On one live workspace that meant a line reading *"and 2,328 more moved today"* on a day when nothing had, with the six named rows above it filled by the newest items on file — which on such a day are yesterday's or older, presented as today's wins.
+
+Nothing was recorded wrongly. This was a read, and only a read, so there is nothing to repair and nothing to do on your side.
+
+Two things change on that day:
+
+- **The window has a floor.** With no brief to anchor it, the day-close counts from midnight — your workspace's midnight, in your workspace's timezone, not the server's. The day still renders its wins: a day with no morning brief genuinely closed things, and they are named. The score half is untouched and still says *"No plan on record this morning"* rather than inventing one.
+- **The block says which window it used.** When the count is measured from midnight, the overflow line says *"…more moved since midnight"* rather than *"…more moved today"*. A surface that quietly changed what it was counting would have honest numbers and say nothing about what they count, which is the same defect one level up.
+
+Days whose morning brief did fire are unchanged, and deliberately so: there the window opens at the brief, exactly as before, and the line still reads *"moved today"* because there it is true.
+
+### EODLEDGER1 — the day-close says what it read, and what the day did to your open book
+
+**The day-close now opens by saying what it read and closes by saying what the day did to your open book — and a day-close that fires late arrives labelled instead of being skipped.**
+
+Three changes, all on the evening surface. No setup, no migration, no re-authorization.
+
+**It opens by saying what it read.** A new line at the top of the surface states, per source, what this run actually looked at: your mail through the point it has been read to, your chat through its own, whether the calendar was reachable, and how far back the meeting pass is reaching. When one of those has fallen behind, the line names the gap — *"read through Friday, July 24 — 5 days behind, so anything closed there since then is not in tonight's numbers"* — instead of reporting the evening's counts as though everything had been seen. A source that could not be reached says so, in plain English, rather than rendering as an empty section. Before this, a connector outage and a genuinely quiet day looked identical on screen, and there was no way to tell *nothing happened* from *I could not look*. This line is never suppressed and never softened, including on a bad night: that is exactly when it is worth reading.
+
+**Every shortened section now says what it is short of.** The slipped and needs-confirming sections show a fixed number of rows, and they used to bind that limit silently — three rows over a list of forty-one read on screen as three. Both now end with the same pointer the wins section already carried, and all of them now name the full number: *"…and 38 more on the you-owe list — this block shows 3 of 41, overdue first."* Nothing was hidden from the record; it was hidden from the sentence.
+
+**It closes by accounting for your open book.** Where the surface used to show only how today went against this morning's plan, it now also states what the day did to the book itself: what was open this morning, what opened, what closed, what you dropped, and where the book stands tonight, with the change named. The opening figure is read from this morning's own run — never guessed. On a day with no morning run there is no opening figure, and the surface says exactly that and shows no movement number, because a guessed baseline is indistinguishable from a measured one once it is on screen. When the four movements do not fully account for the change, it says so rather than quietly making the arithmetic come out.
+
+**And a late day-close now arrives labelled instead of being skipped.** When the evening close fired more than a day late — a machine that was off, an app opened days later — it did all its work silently and then said only that it had skipped. The day it was closing was never scored: not that evening, not ever. It now delivers the read, opening with the span it covers and how late it is, so a stale surface is never mistaken for a fresh one and a missed day is not simply lost. Several missed days are compressed into one read rather than a stack of them. A close that has already been delivered still declines to send twice — late and duplicate are different things, and only the first one changed.
+
+## v5.13.0 — 2026-08-19 — The brief stops hedging, the receipts stop lying, and the unconfirmed pile gets a way out
+
+### BRIEFSTATE1 — the morning brief stops hedging on days when nothing is behind
+
+**Your scheduled morning brief stops claiming your sent mail wasn't checked when it was, and stops hedging every item with "you may have already handled this" on days when reconciliation is current.**
+
+The brief carries a deliberate safety line: when it hasn't been able to look at your sent mail recently, it softens every ball-is-on-you item instead of telling you to redo something you may already have finished, and it says so in one sentence. That protection was firing on **every** scheduled brief — including on workspaces whose sent mail was being reconciled cleanly several times a day. The scheduled brief was never told how far reconciliation had got, so it assumed the worst, every morning. A warning that appears daily is not a warning: the one situation it exists to catch looked exactly like an ordinary Tuesday.
+
+The scheduled brief now reads that state from your workspace, in **either** of the two places a workspace can store it. Workspaces that keep it in the nested settings block are the case a half-fix would have missed, and they are the reason this is worth saying out loud. Reconciliation current: no staleness line, no hedged rows. Reconciliation genuinely behind: the line and the softening come back exactly as before. Both directions are real now, which is the only way either one carries information.
+
+This is not scheduled-only: an on-demand brief that runs through the same builder is corrected too.
+
+**The same fix closes a gap between your two briefs.** The scheduled brief now applies the recent-activity rule the on-demand brief always applied: something you owe on a conversation that moved within the last week stays out of Needs Attention, because that thread is alive and does not need chasing. Your header counts are untouched — they still count everything open. This only governs what the section prints.
+
+**What still differs, deliberately.** The on-demand brief can also set an item aside when it can see that you were the last to reply on the thread, or that a matching meeting is already booked. Both of those need to read your mail and calendar, and the scheduled brief's substrate pass does not touch either — so on a scheduled fire those items are still listed. Shown rather than hidden is the safe direction of that difference, and closing it is separate work.
+
+### USERKEY2 — the resolver reads the older name your workspace may store
+
+**If your `entities.json` records its owner under `workspace.primary_user_id` — an older name for the same pointer — Command Room can now identify you.** It could not before, and nothing said so. On such a workspace the you-owe / they-owe split was computed against nobody, so the headline could report zero things you owe and every open item as owed to someone else, for a whole day. Nothing was wrong with the recorded work. Only the read was.
+
+**No action needed on your side — nothing to set, nothing to rename.** The counts come back on the next run, and with them everywhere ownership is used: reconciliation's attribution, "already done" attestations, self-exclusion in relationship suggestions, and ownership moves on objectives.
+
+`workspace.user_id` is still the one name the workspace schema documents, and the one to set on a new workspace. If your file carries more than one pointer name, the canonical one wins; an older name is read only when nothing ahead of it answered.
+
+**One shape does change, deliberately.** If your `entities.json` carries a `workspace.primary_user_id` pointer *and* an `is_primary_user: true` (or `is_user: true`) flag on a **different** person, Command Room used to follow the flag and now follows the pointer — so the person it treats as you changes. Every pointer name outranks the person flags, which is the order the workspace schema specifies, and it is the shape worth checking if you hand-set that flag during the Bug #102 era, when the install checklist still asked for it. Workspaces with only the flag and no pointer are untouched: the flag still decides.
+
+### REVAMN1 — the unconfirmed pile gets a way out
+
+Every capture the extractor was unsure about lands in the needs-your-call queue as an unconfirmed guess. Nothing ever retired one: they are barred from auto-close and from chasing by design, and the only exit was answering them one at a time. On a workspace with a few months of meetings behind it that queue is the largest number anywhere in the product, and a queue nobody can finish is a queue nobody opens.
+
+Two bulk verbs now reach it, and only it.
+
+- **Review expiry** argues from time. An unconfirmed capture nobody answered inside the window has lapsed — nothing is asserted about whether it was ever real. The bar is **14 days**, much shorter than the 45 confirmed work ages at, because a guess whose context has gone will not be answered better later. Tunable per workspace as `review_expiry_days` (a separate key from `age_out_days`), overridable per run, floored at 3 days.
+- **Ingest kill** argues from provenance. One import wrote a cluster of junk; the user names that meeting or import and the cluster goes. No threshold and no floor — it targets a defect rather than a date, so a cluster written an hour ago is exactly the case it exists for. Either id spelling works.
+
+Both follow the amnesty shape exactly: a plan that writes nothing, a prose confirm shown verbatim, and an apply that re-derives its own pile and takes no row list, so nothing stale can be handed to it. Closes land reversibly in one `swb_` batch under `resolution_reason: "review_expired"` / `"ingest_killed"`, and a single `undo` puts the whole batch back **in the queue** — as unconfirmed captures, exactly the state they left. No new event type, no new writer, no new reverser.
+
+The surface **pre-sorts yours vs other people's** before the confirm. Roughly half a real queue page is other people's promises, captured because they were said in the user's meeting, and someone deciding whether to clear hundreds of rows needs to see which half is which before they answer. A single total hides the fact that changes the answer.
+
+#### Two piles, two verbs, no crossing
+
+The confirmed-tier amnesty previously carried a sentence saying unconfirmed extractions "must never be cleared in bulk by anyone". That sentence is now wrong in one direction only: the review tier has its own verb, not a share of the old one. An amnesty still cannot touch an unconfirmed capture, and a review expiry can never close real work. Both directions are enforced in the module and proved by removing each fence in turn — the review composer's membership test is checked against the live substrate a moment before the write, never against the list it was shown.
+
+That test carries unusual weight here. The review verbs are the only path in this skill that clears the closure floor protecting unconfirmed rows, so for these two verbs the second line of defence is deliberately down and the membership check is the only thing standing between a smuggled real commitment and a silent expiry.
+
+#### A lapse is not a dismissal
+
+Two learners mine dropped commitments for a per-counterparty suppression signal, and at enough of them they propose to stop capturing that counterparty at all. That inference is sound for the per-row Drop, where the CEO looked at one item and let it go. It is not sound for a bulk lapse of a pile nobody adjudicated — and a bad import concentrates its junk on whoever happened to be in that conversation, so counting a kill as a dismissal would suppress precisely the counterparty the defect named. Neither review verb feeds either learner; the per-row Drop is unchanged. Clearing the pile therefore writes no capture policy at all, and a later re-mention is fresh evidence that gets captured again, normally.
+
+#### Stock, not inflow
+
+Expiry drains the stock. It does nothing about the inflow — what stops the queue refilling is the capture side getting better at deciding which extractions to commit and which to surface, which is separate work. The skill says both halves in those words, because a client told only the first will clear the pile once, watch it refill, and conclude the product does not work.
+
+#### When a run clears less than it lined up, it says which reason
+
+The acknowledgement used to render every gap between "lined up" and "cleared" as *had already been answered* — a statement about the user's own queue, made without checking. It is wrong in the case this tier can produce and the confirmed one cannot: an unconfirmed capture that owns smaller pieces still open under it, which the closure path refuses to clear because doing so would take that work down with it. Being told it was answered sends someone looking through a queue where nothing is wrong. The ack now names the reason it actually found — answered, held back, or refused with no reason to give — and when a run clears nothing it says so and offers no undo, because there is no batch to reopen.
+
+#### Two ways in
+
+Fires on `review amnesty` — a third door on the backlog sweep, distinct from `commitment amnesty`, which still means the quiet **confirmed** pile. And on `drop everything from that meeting`, `drop everything that ingest captured` and `drop everything that import captured`, which is the ingest kill said the way somebody actually says it.
+
+Those phrases are fenced two ways, and only where a fence can actually be enforced. Against the **meeting write-up** — `process the meeting` and `meeting notes` belong to a different skill, and this one now says so where the router can see it. And against **undoing the import itself**: to most people "drop everything from that import" means the people, projects and files it brought in, which a different skill owns and this one cannot touch; the word `captured` is what separates the two, and all three skills disclaim each other's half. The queue's own per-row Drop stays distinct in behaviour — it is one row the user has judged, and the workspace still learns from it where a bulk lapse teaches it nothing — but that distinction lives in the skill's instructions, not in what the router matches on.
+
+### USERKEY1 — the resolver reads the key your workspace actually stores
+
+**If your workspace stores its owner as `workspace.user_id` — the way the schema documents — Command Room can now identify you.** Before this fix it could not, and nothing said so.
+
+The primary-user resolver read `workspace.user_person_id`: a key that appears nowhere in the workspace schema and that no part of Command Room has ever written. Workspaces carrying the canonical `workspace.user_id` pointer, with no legacy person flags set, resolved to *nobody*. **No migration is required — set nothing, change nothing.** The affected surfaces start working on the next run.
+
+**One shape does change, deliberately.** If your `entities.json` carries *both* a `workspace.user_id` pointer *and* an `is_primary_user: true` (or `is_user: true`) flag on a **different** person, Command Room used to follow the flag and now follows the pointer — so the person it treats as you changes. That is the order the schema specifies (`user_id` is "preferred over the legacy `is_primary_user` person field"), and it is the shape worth checking if you hand-set that flag during the Bug #102 era, when the install checklist still asked for it. Workspaces with only the flag and no pointer are untouched: the flag still decides.
+
+What comes back, silently, on those workspaces:
+
+- **Friday Wrap's internal/external split** — which was treating you as an outsider to your own company.
+- **The morning brief's self-reply filter** — threads you had already answered were being handed back to you as needing attention.
+- **"Already done" attestations** — logging one needs to know who is attesting, so on these workspaces the verb refused outright rather than recording the close.
+- **Self-exclusion in relationship suggestions** — with no identifiable owner the exclusion list was empty, so you could be recommended as someone to nudge yourself.
+- **Ownership moves on objectives**, and the you-owe / they-owe split wherever it is rendered.
+
+A workspace that had hand-set the legacy `user_person_id` during the Bug #102 era keeps working exactly as before: the resolver still reads it, second. If both keys are present and disagree, the canonical one wins — `user_id` is the key the workspace schema designates, so a disagreeing legacy value is by construction the deprecated one.
+
+Also in this fix: reconciliation's abort message used to tell you to set the key nothing reads, so following its instructions to the letter left the workspace exactly as stuck. It now names `workspace.user_id`. Nine skill instructions that told the assistant to identify you by scanning for a person flag — including the Friday Wrap and morning-brief steps above, and the install checklist, which failed a correctly-configured workspace — now route through the one resolver. A new structural guard (G34) fails the build if a shared helper or a skill instruction starts reading the user pointer on its own again.
+
+### The Apply receipt stops calling successful work an error
+
+Nearly a third of everything you did with the Apply button — 93 of 297 actions over three weeks — was written down as having failed. The work itself landed every time. The receipt about the work was false, and four of the buttons were wrong on *every* press: **Mine**, **Turn into a task** / **Promote**, **Later…**, and typing a note into a row without picking an action.
+
+#### Why
+
+The audit layer maps a handler's own status word onto "landed / nothing to do / refused", and it is deliberately never-optimistic: a word it does not recognize is recorded as an error, because a receipt must not claim a write landed when it cannot prove it. That rule is right and is unchanged. What went wrong is that the list of recognized words had fallen roughly fifty behind the handlers actually doing the work. **Mine** reports its success as `confirmed` and the list only knew the *failure* word from the same handler. **Later…** had no writer at all — the instructions described the event to write and left the writing to the session, so there was no result to read. The note re-route answered in a differently-named field the audit layer never looks at, so *every* one of those, successes included, read as a failure.
+
+The false errors then spread: the page bookkeeping only stops offering a row whose write it can see landed, so answered rows came back and got answered again, and usage reporting inherited the phantom counts.
+
+#### What changed
+
+- **Every status any Apply handler can emit is now classified on the record** — landed, honest no-op, or refusal — with no word left to fall through. The idempotent ones matter as much as the successes: pressing **Turn into a task** on something already a task, or re-sending the same note, now reads as "nothing needed doing" instead of a failure, so the row stops being re-offered.
+- **Later… gained a real writer.** One call now decides and performs: on your own item it moves the due date; on something owed *to* you it hides the row until that date and leaves the other person's deadline alone. It refuses a date it cannot read rather than writing a reminder that never comes back.
+- **The note re-route answers in the same field as everything else** (the old field name rides along unchanged for one release, then goes).
+- **This is the fourth fix of this class and the first that is not one more word.** Three earlier releases each taught the list exactly one status, and the last one shipped a completeness check that read a single file behind a hand-written list. The check now derives what to look at from the dispatch instructions themselves, so a button routed into new code tomorrow is covered with no test to remember. It is a ship-blocking guard (G35); it fails if any status is unclassified, and it fails loudly on the one shape no static check can read rather than skipping it quietly.
+
+#### Customer migration impact
+
+None to perform, and **expect your error counts to fall.** Apply receipts written before this release may show "error" on gestures that actually succeeded; those rows are receipts, not state — nothing was wrongly closed, wrongly left open, or needs replaying, and they are not rewritten. Usage reports and health surfaces read those rows, so a report that covers the period before this update will still show the old inflated number while everything after it drops sharply. That is the count becoming honest, not a regression — the same shape as the v5.10.0 cleanup note that got *longer* when it stopped swallowing its own failures.
+
+One knock-on you may notice: rows you have already dealt with stop reappearing. They were coming back because the system could not tell that your answer had worked.
+
+#### Also closed
+
+The undo rail's own status words — an undo repeated twice, an undo of something that was never confirmed — were queued as their own change when v5.9.3 shipped and still classified by fall-through. They are covered here, because the completeness guard derives its scope from the dispatch instructions and those handlers are on them.
+
+#### Files touched
+
+`shared/scripts/apply_audit.py` · `shared/scripts/orphan_note.py` · `shared/scripts/commitment_state.py` · `skills/apply-choices/SKILL.md` · `skills/end-of-day/SKILL.md` · `skills/enable-command-room-schedules/references/orchestrator-my-plate.md` · `shared/CHAT_ACTION_WIDGET.md` · `shared/COMMITMENT_SCHEMA.md` · `shared/EVENT_TYPES.md` · `tests/apply_census_lib.py` · `tests/run_fs18_outcome_coverage_test.py` · `tests/run_applyaudit1_verb_families_test.py` · `tests/run_mlk1_retirement_test.py` · `tests/run_prose_contract_scanner_test.py` · `tests/run_all.py` · `tests/GUARDS.md` · `CHANGELOG.md`
+
+#### What's NOT in this ship
+
+The page bookkeeping that re-offered the rows is unchanged and was verified, not rewritten — it was always correct and was being fed lies. Historical audit rows in any workspace are left exactly as written. Three sibling receipt gaps found alongside this one — a surface that writes no Apply receipt at all, an undo answered in chat that writes its reversal but no receipt, and an empty fire that writes nothing — are their own change.
+
+### A retired chat now says it retired, instead of saying the plugin is broken (RETIREGATE1)
+
+If one of your scheduled chats has been answering with
+
+> ⚠️ The orchestrator file for `<chat>` exists but doesn't contain the canonical OUTPUT CONTRACT marker. The plugin may be partially installed or corrupted. Please reinstall Command Room and type `set up command room schedules`.
+
+**your install was fine.** Nothing was corrupt and reinstalling would not have helped. The chat behind that message had been retired, and the retirement notice it was supposed to post was sitting one step further down than the fire ever got.
+
+Two chats were affected, both on workspaces that had them registered before their retirement: **Pulse** (retired in v5.8.0) and **Upcoming Meetings** (retired in v5.11.0). A retired chat keeps a small file whose only job is to explain the retirement and stop. The scheduled-task loader checks that file for a marker *before* it opens it — and neither of those two files had ever been given one, so the check failed, the loader posted a corruption warning, and the explanation underneath was never reached. Nothing was written and nothing was lost either way; the only cost was a weekly alarm about a problem that did not exist.
+
+Fixed on both sides, so it cannot come back if either half is edited later:
+
+- Both retirement files now carry the marker at the top, which is also what the message was asking for.
+- The loader now checks whether a chat is retired **before** it checks for the marker. A retired chat posts its retirement notice and stops — the corruption message is unreachable for it. Renamed chats (Past Meetings → End of Day) are deliberately excluded and keep firing their real surface exactly as they do today.
+
+If you switched one of these chats off as a workaround, that was the right call and nothing needs undoing — both are retired and their work moved elsewhere. The notice each one now posts says where.
+
+## v5.12.0 — 2026-08-14 — The capture floor learns to read the room, and the decision log renders again
+
+### FLOOR3 — the J-1 demo shape, measured on real captures before shipping (PR #53)
+
+The V1 re-measure of 2026-08-12 failed both targets — confirmed-lane junk 6/15 = 40%, overall 9/25 = 36% — and 8 of the 9 junk items were J-1, the class FLOOR2 had shipped a check for. This release is that fix, and the story of it is worth the space because it changed how the floor gets verified.
+
+#### Root cause
+
+`_POST_MEETING_SURFACE_RE` ran as an **unconditional veto** over title+evidence *before* either positive signal, on the premise that a send / share / invite verb means the deliverable outlives the call. In the demo and onboarding register — where the whole week's junk lived — that premise is inverted: the artifact is produced in the room while the client watches, and "let me send you that here" is a completed act, not a promise. Every junk item carried a delivery verb, so every one of them died before the check ran.
+
+The proof was a single item: its evidence read "Send that over to me", its transcript said "Okay. That's done." a few turns later, and `_COMPLETION_ACK_RE` **already matched** that acknowledgment. The veto discarded the evidence before the ack leg ever ran. The defect was ordering, not vocabulary.
+
+#### The first fix was wrong, and only a replay could show it
+
+v1 reordered the veto and added four signals reading the item's own evidence. It passed a 414-suite battery, green CI on both jobs, and two adversarial fresh-context reviews. Replayed against 110 real captures it caught **zero** of the 9 known junk items and moved the junk rate not at all.
+
+The classes had been authored against the V1 audit report's **quote column** — quotes an auditor assembled while reading transcripts, which blend an item's evidence with the speech around it — rather than against the `data.evidence` strings the substrate holds. An entire signal was built on "that's going out", a phrase that appears in no evidence string in the population. Measured leg-1 hit rate: 3 of 110, all three then failing the second leg. The same error a third time: the demo register modelled a *guided* walkthrough (the other side drives, the presenter gives UI instructions) while the real demos are *narrated* (the presenter drives and describes), so 0 of 10 cue families matched and the register was false on the one true demo meeting.
+
+Neither review could catch this. Both checked the code against the spec, and the spec rested on the same premise.
+
+#### Fix
+
+The correction is a **relocation, not a rewrite**. Every phrase v1 hunted for is real and is in the record — it sits in the **tail**, the transcript that follows the evidence span, which is where the auditor was reading. So the four evidence-side classes are deleted and one tail-read check replaces them.
+
+- `_IN_ROOM_DISCHARGE_RE` reads the 30 tokens after the evidence span (`DISCHARGE_WINDOW_WORDS`). Window measured at 20/30/45/60: junk yield saturates at 30 (3 → 6 items); the false-positive count does not move until 60.
+- Members cut during v1's fix rounds are back, and are safe here for the reason they were unsafe there: `I have <thing> open` read from the item's own evidence swallows "I have to follow up" — the most ordinary promise shape in English — while read from the neighbouring transcript it means the room did it.
+- The demo register learned the narrated family. The demo meeting scores 6 distinct cue families; no other meeting in the window exceeds 2.
+- **One doctrine change:** discharge evidence now outranks the due-date, money and future-time rails. A date is an *inference* that a deliverable is expected later; a transcript reporting it done is an *observation* that it already happened, and an observation of the past outranks an inference about the future. Both junk items the rails were protecting carry a date describing the **subject** rather than a deadline ("move tonight's dinner reservation", "send the Wednesday invite") and both acts were performed on the call. The rails keep full force everywhere the room said nothing.
+
+#### Cross-lane dedup
+
+`route_meeting_captures` routed and *built* each item in one walk, so nothing in a batch ever compared two items, and twins of one utterance could land in different lanes with neither aware of the other. It is now three passes with a collapse between them, keyed conjunctively: same utterance, same act (title content sets equal), same parties, compatible due. A false collapse silently loses a commitment while a missed one only leaves the duplicate row that exists today, so the key is deliberately strict. The counterparty is compared per field as *equal-or-absent* — on the live ledger the twin pair differs only in that one extraction resolved the counterparty to an id and the other kept the name, and tuple equality read two spellings of one person as two people. Survivor is the dated twin first, then the most-scrutinized lane.
+
+#### Measured
+
+Replayed on 110 real captures, three code sets:
+
+| | before | v1 | v5.12.0 |
+|---|---|---|---|
+| known junk gated | — | 0 / 9 | **6 / 9** |
+| confirmed-lane junk | 38.9% | 38.9% | **15.4%** |
+| REAL items wrongly gated | 3 | 3 | **3** (unchanged — this release adds none) |
+| duplicate pairs collapsed | 0 | 5 | 5 |
+
+**The <10% target is not met.** The two survivors leave no verbal trace in the sentence or the following turns; neither is reachable by a lexical check, and inventing one is the mistake this whole change is about.
+
+### Decision log — two readers keyed to fields the writer abandoned
+
+One defect class, two instances, both found while triaging a laptop retest.
+
+- **415 of 648 rows rendered `(untitled decision)`.** The title chain read `data.title` then `data.decision`; the writer moved to `data.summary` around mid-May 2026. Chain is now `title → summary → decision → evidence clip`.
+- **Every plainly-superseded decision rendered Active.** 129 of 130 `decision_superseded` events key their target by `data.decision_id`; the reader read only the seq-shaped fields, so the supersede was dropped on the floor and `Superseded (historical)` showed a count of 1 — literally the one legacy event. Both spellings now join, and the reaffirm and revisit readers accept both too so the same drift cannot recur in the other half.
+
+The intake's report that six decisions had "vanished from the view" was not a third defect: all six render, as `(untitled decision)`, which is why a search by their content found nothing. Measured on the live ledger: untitled **415 → 26**, superseded **1 → 122**.
+
+### Also in this release
+
+- **The capture-replay harness** (`scripts/replay_captures.py`, `compare_replays.py`, `README_REPLAY.md`). The V1 measurement no longer requires waiting a week for live captures: the admission gates are pure functions of `(captured item, transcript)` and a floor change touches only the gates, so past meetings can be re-scored directly. It carries a fusion-based authenticity gate — transcripts arrive through a connector, and on the first run 3 of 24 came back reconstructed rather than copied. A wrong transcript does not error; it silently yields inert checks and a confident meaningless number.
+- **Five `runtime_exercise` suites** that the battery's discovery filter had been silently dropping now run.
+- Doc-drift fixes, repo-cruft removal, and the two platform-dependent battery reds from the plugin-mechanisms audit.
+
+### Files touched
+
+`shared/scripts/meeting_capture.py` (the FLOOR3 layer rewritten), `shared/scripts/render_decision_log.py`, `skills/meeting-notes/SKILL.md` and `skills/enable-command-room-schedules/references/orchestrator-past-meetings.md` (both `capture_counts` enumerations gain `n_deduped`), `tests/run_floor3_test.py` + `run_floor3_mutation_test.py` (both rewritten for v2 — v1's 42 pins were sound and pinned the wrong classes), `tests/run_floor2_test.py` (two pins amended to the new doctrine), `tests/run_decision_log_field_drift_test.py` + mutation suite (new), `tests/run_captureflow_bounds_test.py`, `scripts/replay_captures.py` + `compare_replays.py` + `README_REPLAY.md` (new).
+
+### Customer migration impact
+
+None required. Fewer already-done items reach the book at the next scheduled fire. The decision log corrects itself the next time it regenerates — say "show my decision log" to see it immediately.
+
+### What's NOT in this ship
+
+- **The held-out retake.** The 25-item acceptance sample is drawn (deterministic, seed 20260814) and unjudged. It, not this release, is the gate for CHATSCAN1 leg D and GRANOLA1 writes.
+- **`cr test --attended` was NOT walked for this build.** The unattended battery (414/0) and CI answer a different question. Flagged before the cut; shipped on M's decision.
+- **The fusion-inert finding.** 20 of 131 live captures (15%) carry evidence that is not verbatim from their transcript and are not flagged — `fusion_refusal_reason` is skip-not-fail and leaves no trace when inert, so "not flagged" reads as "verified" when it means "never checked". It also caps any further floor work, since those rows can never anchor. Filed to intake, not built.
+
 ## v5.11.1 — 2026-08-13 — Brief links open on OneDrive and SharePoint workspaces too
 
 ### BUG-8538 — the cloud opener learns Microsoft (PR #51)
