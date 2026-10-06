@@ -152,7 +152,7 @@ HTML that carries action buttons without them.
 ### Bottom row buttons
 
 - **Apply all** — fires one `sendPrompt` with all current selections (see "Submission format" below). Disabled when 0 selections. **Disable-with-reason (v4.5.2 S2 — F-17):** when a selected action is missing its REQUIRED input (Later… without a date), Apply stays disabled and the reason renders on the footer's `#cr-apply-reason` line ("Apply is waiting on item 3 — Later… needs a date."), the offending row highlights, and the field shows an inline "needs a date" note. The hold clears live as the field fills. A widget must NEVER swallow an Apply click silently — that is exactly F-17 (M concluded the button was dead).
-  **The dispatch half of the same rule (WIDGETSEND1, BUG-2026-09-18):** the rule above was only ever applied to the VALIDATION path. The DISPATCH path kept a silent fallback — `window.sendPrompt`, then `window.parent.sendPrompt`, then a `console.warn` — and on a seat where the widget frame is cross-origin with its parent, reading `window.parent.sendPrompt` throws `SecurityError` and aborts the handler before even that warning. Apply looked like it worked and nothing reached the chat. There is now ONE dispatcher, `crSendPrompt(t, p)`, and it **looks the stage up before it calls it**: three holders in order (`window.cowork`, `window`, `window.parent`), each READ inside its own try so a cross-origin read cannot abort the click, and a holder is used only when its `sendPrompt` is actually a function. **A call that was made ends the ladder, whatever it does.** A stage that delivers and then raises is reported as delivered-with-error and is never retried on the next stage — falling through after a delivery is how one Apply becomes two, and on an unframed page (`window.parent === window`) that was the common case, not the rare one: stage 3 would re-invoke the very function stage 2 had just called. One click, one delivery, or none. When no stage delivers, the card SAYS SO — a `#cr-sf` footer line ("This card could not reach the chat. Copy the line below and paste it."), a read-only selectable `#cr-sw` field, a clipboard attempt (`execCommand`, then `navigator.clipboard`) that appends "Copied." to the line when it lands, and **Apply re-enabled** so a second click can retry once the runtime recovers. No console-only path remains on the dispatch path. **What that field carries is the TYPED NUMBERED line, never the wire** (`p`, the dispatcher's second argument — every caller passes one): the row's visible number, the verb with its bracketed placeholder filled in from the row's own input, and the row's note, joined with ", " — `1 draft, 2 draft, 3 draft`, or `83 resolved, 84 push to 2026-09-26`. The `apply choices: [...]` payload is wire format and trips two named classes in this product's own `validate_chat_output` (apply-payload string, internal commitment id), so it must never be shown to a customer even as something to paste; the typed form is what the board's verb-by-number path already accepts, resolved through `plate_view.resolve_display_number`. The same dispatcher text is carried BYTE-FOR-BYTE by the standalone onboarding widget (`skills/command-room-onboarding/references/step1_widget_v2.html`, the Finish click), pinned identical by `tests/run_widgetsend1_test.py`, which EXECUTES both texts under node — there is no modelled fallback engine, because a model of the branch ladder would have called the double-send correct. The failure nodes are minted at runtime, never rendered into the page, so a read-only page still carries no batch chrome.
+  **The dispatch half of the same rule (WIDGETSEND1, BUG-2026-09-18):** the rule above was only ever applied to the VALIDATION path. The DISPATCH path kept a silent fallback — `window.sendPrompt`, then `window.parent.sendPrompt`, then a `console.warn` — and on a seat where the widget frame is cross-origin with its parent, reading `window.parent.sendPrompt` throws `SecurityError` and aborts the handler before even that warning. Apply looked like it worked and nothing reached the chat. There is now ONE dispatcher, `crSendPrompt(t, p)`, and it **looks the stage up before it calls it**: two holders in order (`window`, `window.parent`), each READ inside its own try so a cross-origin read cannot abort the click, and a holder is used only when its `sendPrompt` is actually a function. **A call that was made ends the ladder, whatever it does.** A stage that delivers and then raises is reported as delivered-with-error and is never retried on the next stage — falling through after a delivery is how one Apply becomes two, and on an unframed page (`window.parent === window`) that was the common case, not the rare one: the last stage would re-invoke the very function the one before it had just called. (Night M1, D-2: the ladder opened with a third holder, the desktop sidebar's own runtime; that runtime is absent on every merged seat and the stage was removed — the shim is the one place its name still lives.) One click, one delivery, or none. When no stage delivers, the card SAYS SO — a `#cr-sf` footer line ("This card could not reach the chat. Copy the line below and paste it."), a read-only selectable `#cr-sw` field, a clipboard attempt (`execCommand`, then `navigator.clipboard`) that appends "Copied." to the line when it lands, and **Apply re-enabled** so a second click can retry once the runtime recovers. No console-only path remains on the dispatch path. **What that field carries is the TYPED NUMBERED line, never the wire** (`p`, the dispatcher's second argument — every caller passes one): the row's visible number, the verb with its bracketed placeholder filled in from the row's own input, and the row's note, joined with ", " — `1 draft, 2 draft, 3 draft`, or `83 resolved, 84 push to 2026-09-26`. The `apply choices: [...]` payload is wire format and trips two named classes in this product's own `validate_chat_output` (apply-payload string, internal commitment id), so it must never be shown to a customer even as something to paste; the typed form is what the board's verb-by-number path already accepts, resolved through `plate_view.resolve_display_number`. The same dispatcher text is carried BYTE-FOR-BYTE by the standalone onboarding widget (`skills/command-room-onboarding/references/step1_widget_v2.html`, the Finish click), pinned identical by `tests/run_widgetsend1_test.py`, which EXECUTES both texts under node — there is no modelled fallback engine, because a model of the branch ladder would have called the double-send correct. The failure nodes are minted at runtime, never rendered into the page, so a read-only page still carries no batch chrome.
   **The dispatcher's twin (CUT-C item 5):** the hold lives in the page the transport rendered; a page hand-assembled from pieces has none, and a `push to [date]` with no date can then reach apply-choices. The dispatcher refuses it in one line (`commitment_state.later_missing_ack` — names the missing input and how to give it, asks nothing) and re-offers the row; the widget is relayed byte-exact and never re-assembled.
 - **Reset** — resets all per-item selections to "no choice yet." No `sendPrompt`. Local state only. (Button label "Reset"; was "Clear".)
 - **Snooze rest (1 day)** — selects `skip` (the 1-day mute) for every unselected item, then fires Apply automatically. Convenience for "I've reviewed; snooze the rest until tomorrow." (Label was "Skip all"/"Dismiss rest" — renamed so the mute states its duration, F-59.)
@@ -250,7 +250,7 @@ Use `_hq/CONVENTIONS_SOURCE_LINKS.md` as the canonical source-link format:
 
 ### Drop `present_files` in v2.12.0+
 
-The post-widget markdown links section replaces `mcp__cowork__present_files` cards. Cards are visually separated from the chat content; markdown links sit naturally inline and match Sam's Apr 30 ask: *"those briefs hyperlinked right under that UI."* `present_files` calls in orchestrator phase 6/9 specs are removed v2.12.0+.
+The post-widget markdown links section replaces the harness's file cards. Cards are visually separated from the chat content; markdown links sit naturally inline and match Sam's Apr 30 ask: *"those briefs hyperlinked right under that UI."* `present_files` calls in orchestrator phase 6/9 specs are removed v2.12.0+.
 
 ## Action reference — what each button does (v2.12.2+; v4.5.2 S2)
 
@@ -583,7 +583,7 @@ per page per fire, never re-run for a page already in hand (RV-3
 double-render). Surfaces without a driver use the direct call below.
 
 ```python
-# Rule 22 preamble REQUIRED before this runs: cd "$PLUGIN_ROOT" (SESSION_DIR=$(echo "$CLAUDE_CODE_TMPDIR" | sed "s|/tmp$||"); PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d "$SESSION_DIR"/mnt/.remote-plugins/plugin_*/shared/scripts/chat_output_renderer.py 2>/dev/null | head -1 | sed 's|/shared/scripts/chat_output_renderer.py$||')}")
+# Run the Access preamble first (CONTRACT Rule 22 v6, the block in shared/WORKSPACE_ACCESS.md): it resolves $PLUGIN_ROOT, exports CR_ENV, and cds there.
 import sys; sys.path.insert(0, "shared/scripts")
 from widget_transport import render_and_persist
 transport = render_and_persist(
@@ -646,7 +646,7 @@ Everything the cowork path guarantees holds here, produced by the SAME gate stac
 
 1. Build the data view, set `widget_mode: "all_batch_widget"`, and render + validate + persist it via `widget_transport.render_and_persist` (§ Transport above) — all validators fire inside the call. Unbounded views pass `page=N` and paginate; bounded views omit `page`.
 2. Post the widget by passing `transport["html"]` (the persisted page's validated bytes, verbatim) to `mcp__visualize__show_widget` as `widget_code`. **The widget is the entire user-facing surface for the items.** No accompanying markdown narration, no "here's what you can do" prose, no recap of the widget's button labels.
-3. After the widget posts, if any `.docx` deliverables were produced this fire (briefs, prep docs, etc.), call `mcp__cowork__present_files` ONCE with an array of all absolute paths. Cowork emits inline file cards beneath the widget, named by the source filename (which already includes the meeting / project slug). This is the ONLY mechanism for clickable file surfaces — `computer://` links inside the widget HTML do not work (iframe sandbox blocks them).
+3. After the widget posts, if any `.docx` deliverables were produced this fire (briefs, prep docs, etc.), hand the harness the array of all absolute paths ONCE, through whichever file-delivery verb it exposes. Inline file cards appear beneath the widget, named by the source filename (which already includes the meeting / project slug). Where the harness has no such verb the markdown links above are the surface. This is the ONLY mechanism for clickable file surfaces — `computer://` links inside the widget HTML do not work (iframe sandbox blocks them).
 
 **MUST NOT do:**
 
@@ -733,3 +733,59 @@ See `chat_output_renderer.py` `_LEAK_PATTERNS` for the full regex set.
 - `HANDOFF_cr-plugin-feedback-v2-10-9_2026-04-29.md` — the broader v2.10.9 feedback batch state.
 - `_hq/CONVENTIONS_EMAIL_PREVIEW.md` — email draft format used inside the widget for any item that has a draft.
 - `_hq/CONVENTIONS_SOURCE_LINKS.md` — source-link format used in item context (linked phrasing, source emails, transcripts).
+
+## The Access preamble this file refers to
+
+Propagated by `scripts/dev/propagate_access_preamble.py`; the canonical copy is in `shared/WORKSPACE_ACCESS.md`.
+
+```bash
+# >>> CR ACCESS PREAMBLE v6 (CONTRACT Rule 22; shared/WORKSPACE_ACCESS.md) >>>
+# The substrate is on the customer's machine; this process may not be. Every
+# read, helper and write goes through workspace_access ON the host that holds
+# the data. Never open, copy or tar a workspace file into this session, and
+# never write one from here.
+#  1 RESOLVE, once per call. The four lines below name the plugin root, the
+#    environment, and -- on a seat whose files are local -- the workspace. On a
+#    merged seat resolve instead with `workspace_access.py discover`, hand the
+#    block it prints to the device shell, and keep its answer: WS, RT, BRAIN,
+#    MODE; and DEVICE = the entry in get_device_info's connectedFolders whose
+#    last path segment is WS's basename -- export CR_DEVICE_WORKSPACE="$DEVICE"
+#    before the first plan, so a saved document can name the folder the
+#    customer opens. A runtime that is absent, or a runtime_version that
+#    differs, is a STOP: run the update-bridge install step. There is no
+#    container fallback.
+#  2 BRAIN. When BRAIN is not null, `plan read` it first -- one call.
+#  3 HELPERS. One verb is one call (150 s budget). Render the command ONLY with
+#    `workspace_access.py plan run_helper --json '{"name":"<module:function>",
+#    "args":{...}}'` and paste what it prints, verbatim -- INCLUDING the
+#    variables in front of python3, which carry the writer identity and the
+#    run mode to the host that holds the data. The reply is one JSON
+#    envelope; ok:false is a stop, never a hand retry.
+#  4 WRITES. Only `plan write` and `plan append_jsonl` -- never an append
+#    redirect, an in-place edit, a heredoc into the workspace, or a python body
+#    that opens a substrate file.
+#  5 LEGACY / LOCAL. When this seat's files are on this filesystem -- an older
+#    sandbox seat, or a Code session on the customer's own machine -- the same
+#    verbs run in this shell, and the four lines below resolve it for them.
+#  6 THE SURFACE IS THE WHOLE ANSWER. A step that could not run gets ONE
+#    sentence with no file, script, path, variable, shell text or mechanism
+#    in it -- "One step could not run here; what is below is complete." or
+#    "... is partial." Never narrate a workaround, never say what you tried.
+#  7 STAGING. A file this chat needs for itself -- a widget copy, a scratch
+#    render -- lives in this session's own scratch, never under the
+#    workspace. Nothing under `_hq/` is created, copied or removed by a
+#    redirect, `cp`, `tee` or `rm`: a file is written by `plan write` and
+#    removed by `plan remove`, and a removal is reported in the envelope's
+#    own words -- removed, moved aside, or still there -- never as done.
+#  8 WRITERS. A document, a receipt, a close or a re-pin is written by
+#    `plan run_writer` naming a writer on its list -- never by importing a
+#    writer in a shell. The door forwards who you are; a writer with no
+#    identity on this seat refuses in one sentence, and that sentence is the
+#    whole answer.
+SESSION_DIR=$(echo "${CLAUDE_CODE_TMPDIR:-}" | sed "s|/tmp$||")
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d "$SESSION_DIR"/mnt/.remote-plugins/plugin_*/shared/scripts/chat_output_renderer.py /root/.claude/plugins/synced/*/*/shared/scripts/chat_output_renderer.py 2>/dev/null | head -1 | sed 's|/shared/scripts/chat_output_renderer.py$||')}"
+eval "$([ -n "$PLUGIN_ROOT" ] && cd "$PLUGIN_ROOT" 2>/dev/null && python3 shared/scripts/env_detect.py --shell || echo CR_ENV=unknown)"; export CR_ENV CR_PLUGIN_ROOT CR_BRAIN_FILE CR_LOCAL_FS CR_CLOCK_TRUST
+WORKSPACE=$(find "$SESSION_DIR/mnt" -maxdepth 5 \( -name "_archive" -o -name "_demo-framework" \) -prune -o -type d -name "_hq" -print 2>/dev/null | awk -F/ -v z=0 '{print NF, $z}' | sort -n | head -1 | cut -d" " -f2- | sed 's|/_hq$||'); [ "${CR_LOCAL_FS:-1}" = "1" ] && [ "${CR_ENV:-}" != "merged_cloud" ] || WORKSPACE=""
+[ -n "$PLUGIN_ROOT" ] && cd "$PLUGIN_ROOT" || true
+# <<< CR ACCESS PREAMBLE v6 <<<
+```

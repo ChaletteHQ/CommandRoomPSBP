@@ -30,6 +30,18 @@ This applies to FIRST FIRES and to RE-RUNS ("regenerate with real data" / "show 
 
 8. **No markdown lists as a substitute for widget rendering (v2.14.37+).** If a user follow-up asks you to "surface past commitments" / "show what's open" / "list the X" — any kind of "render these items in chat" ask — the path is `render_and_persist` → `show_widget` with `transport["html"]` as `widget_code`. Emitting a markdown bullet list of items in chat is FORBIDDEN, even when the prior widget was empty-state, even when the user explicitly asked for "a list," even when you think markdown is "lighter weight." Re-fire through the canonical path with the appropriate `data_view` (e.g., adjust filter threshold to surface previously-noise-filtered items as `tracked_items`).
 
+### The turn's shape (IDENT1 I-4, ruling R-RW2-6, 2026-09-22)
+
+**`[ack line — rerun tier only] → widget → Briefs/Sources → STOP`.** The lines that may come BEFORE the widget are exactly the ones `inbox_helpers.post_order` returns for this fire (the clock notice when the clock was substituted, then the re-run `ack` or the lateness banner) — and NOTHING else renders before it: no run-mode line, no "reading the orchestrator", no step narration ("Now the…", "Persist the page…"), no "silent receipt writes". Nothing renders after it either: `after_widget` is always empty. The 2026-09-22 fire printed five working notes above its widget and an ack, a narration line and a three-line summary below it; `validate_chat_output`'s `fire_narration` family reds that shape by name.
+
+### The ONE sanctioned non-widget surface (IDENT1 I-12, ruling R-RW2-7 (a))
+
+On a run whose tool list has NO `mcp__visualize__show_widget` (the merged seat's "Require this computer" fire shape), the surface is the grouped text list `inbox_helpers.render_inbox_text` renders, delivered as `inbox_helpers.plan_delivery` plans it — and it obeys this same STOP: nothing renders after its saved-at line, which is always the message's last line (when the page was republished, the one `Open the page:` line sits directly above it). It is the only non-widget surface, and it is never a stop message: the customer's morning list still lands.
+
+### The fire's final response (INBOXDRIVE1, ruling R-RW3-4, 2026-09-23)
+
+A scheduled fire's final response is what the phone shows for the task (Probe B; the re-walk's 19:25 screenshot showed a diagnosis paragraph there, naming a ledger file and a tool). So on a run with no widget tool, the last message of this run is exactly the driver's `text`, unchanged; when `SendUserMessage` exists it is called with the same text first; nothing is written before the first line of that text or after its last line — no summary of what ran, no note about tools, no file name, no variable, no apology. A refusal's `lines` are the whole final response the same way. `inbox_helpers.post_order(verdict, widget=False)` answers `after_surface: []` — the lines allowed after the saved-at line — and there are none.
+
 ### Self-check before posting anything
 
 If you're about to write text in chat that comes AFTER a `show_widget` call, ask yourself: "is this required by the post-widget Briefs/Sources spec?" If no → DO NOT POST IT. Stop. The chat turn is over.
