@@ -22,6 +22,8 @@ Applies to **every skill that emits a recipient-bound email draft, regardless of
 
 This includes email drafts that arise as **sub-steps of another skill's work or of a longer multi-step turn**: chain email-writer (the thread-revival precedent — now dormant-customer-scan's threads lens; CONTRACT Rule 30), don't compose inline.
 
+**Load the widget tool before anything else** (`shared/CHAT_ACTION_WIDGET.md` § Finding the widget tool first): on the merged and half-merged seats it is deferred, and a listed deferred tool counts as present; ToolSearch loads it, its setup tool runs first, then the relay.
+
 Every skill in this list MUST render its draft surface as a chat-action widget via `widget_transport.render_and_persist(data_view, wrapper="fragment")` — the full validator chain runs inside — passing `transport["html"]` (the persisted page's validated bytes, verbatim) to `mcp__visualize__show_widget` as `widget_code` (`shared/CHAT_ACTION_WIDGET.md` § Transport, Bug #67). Plain-text previews in chat are NOT a valid alternative — they break editability and force back-and-forth chat-turn revisions. See §1 (lazy creation), §2 (numbered actions), §3c (Zapier-threaded send) for the per-action semantics every emitter follows.
 
 ## 0. Plain-English chat output (v2.10.0+)

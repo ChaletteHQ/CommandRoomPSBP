@@ -202,8 +202,16 @@ def reenabled_line_re():
     if "{chat}" not in form:
         return None
     head, tail = form.split("{chat}", 1)
-    return re.compile("^" + re.escape(head) + r"[A-Z][A-Za-z ]{0,40}"
-                      + re.escape(tail) + "$")
+    single = re.escape(head) + r"[A-Z][A-Za-z ]{0,40}" + re.escape(tail)
+    # CHATSON1: the same line for several chats, their names joined with
+    # commas and one "and" in the slot (`REENABLED_LINES_FORM`).
+    many_form = str(getattr(md, "REENABLED_LINES_FORM", "") or "")
+    if "{chats}" in many_form:
+        mhead, mtail = many_form.split("{chats}", 1)
+        many = (re.escape(mhead) + r"[A-Z][A-Za-z ,]{0,200}"
+                + re.escape(mtail))
+        return re.compile("^(?:" + single + "|" + many + ")$")
+    return re.compile("^" + single + "$")
 
 
 def product_closing_lines() -> List[str]:

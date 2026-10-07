@@ -265,8 +265,8 @@ def run_my_plate_surface(workspace_root: str, *, page: int = 1,
     if personal_cap is not None:
         kwargs["personal_cap"] = int(personal_cap)
     if tools is not None:
-        from inbox_helpers import WIDGET_TOOL, _tool_names
-        _widget = WIDGET_TOOL in _tool_names(tools)
+        from inbox_helpers import widget_tool_name
+        _widget = widget_tool_name(tools) is not None
         kwargs["extra_receipt_data"] = {"receipt_flags": {
             "widget_rendered": True, "widget_posted": _widget,
             "text_fallback": not _widget, "push_planned": True}}

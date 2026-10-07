@@ -15,7 +15,7 @@ Read `shared/STOP_CONTRACT.md` from disk and obey it as your first action of eve
 Inbox-specific scope notes:
 - `.docx` briefs in `_hq/meetings/` and similar spec-defined per-orchestrator deliverables continue per their phases — those are documented persistent artifacts, separate from the post-widget output surface the STOP CONTRACT governs.
 - Inbox re-runs (`regenerate inbox`, `re-fire inbox`, `show me my inbox with X criteria`) re-execute Phase 1 onward; do NOT save intermediate outputs. (This is what broke `Edit then send` in v2.14.13 testing — the freelance "save HTML for reopening" pattern.)
-- **No widget tool in this run** (the merged seat's scheduled shape): the surface is the grouped list the Phase 5 call returns, and the run's FINAL RESPONSE is that `text`, unchanged, and nothing else (Phase 6 § FINAL RESPONSE; `shared/STOP_CONTRACT.md` § The fire's final response).
+- **No widget tool in this run after the load in `shared/CHAT_ACTION_WIDGET.md` § Finding the widget tool first (a listed deferred tool counts as present: it is loaded, never read as absent)** (the merged seat's scheduled shape): the surface is the grouped list the Phase 5 call returns, and the run's FINAL RESPONSE is that `text`, unchanged, and nothing else (Phase 6 § FINAL RESPONSE; `shared/STOP_CONTRACT.md` § The fire's final response).
 
 ---
 
@@ -305,13 +305,15 @@ The answer's `result` is `{ok, text, page_rel, page_pc_path, bytes_len, push, ca
 
 # Phase 6 — Deliver exactly what the call returned, then STOP
 
-**No widget tool in this run (the merged seat's scheduled shape; IDENT1 I-12, ruling R-RW2-7 (a)).** Make the answer's `calls`, in order, and nothing else: `SendUserMessage` with its `text` (when that tool is absent too, that text IS the chat turn); the planned `Write` — the landed page's own bytes (`content`) into a copy HERE, in this container, at its `file_path`, because this container cannot read the customer's computer; the page republish of that same copy ONLY when planned (page-only: the stored address and the page, never files, never force); `SendUserFile` with that copy when planned. A republish that asks or is refused lands the answer's `on_refused_row` and nothing else:
+**No widget tool in this run after the load in `shared/CHAT_ACTION_WIDGET.md` § Finding the widget tool first (a listed deferred tool counts as present: it is loaded, never read as absent) (the merged seat's scheduled shape; IDENT1 I-12, ruling R-RW2-7 (a)).** Make the answer's `calls`, in order, and nothing else: `SendUserMessage` with its `text` (when that tool is absent too, that text IS the chat turn); the planned `Write` — the landed page's own bytes (`content`) into a copy HERE, in this container, at its `file_path`, because this container cannot read the customer's computer; the page republish of that same copy ONLY when planned (page-only: the stored address and the page, never files, never force); `SendUserFile` with that copy when planned. A republish that asks or is refused lands the answer's `on_refused_row` and nothing else:
 
 ```bash
 python3 "$RT/shared/scripts/workspace_access.py" append_jsonl --json '{"holder": "inbox", "rel": "_hq/data/events.jsonl", "rows": [<the on_refused_row from the answer, only when a planned republish was refused>]}'
 ```
 
 Then send its `push` — the one sentence, counts only — as the notification. The message carries draft PREVIEWS only. A `draft N` reply later in this chat is read by `inbox_helpers:typed_reply_action` from the row number and the saved page — never from this fire's transcript (it arrives under the replying device's own model) — and routes through `apply-choices`' existing draft action, the same one the widget's button fires.
+
+**Load the widget tool before anything else** (`shared/CHAT_ACTION_WIDGET.md` § Finding the widget tool first): on the merged and half-merged seats it is deferred, and a listed deferred tool counts as present; ToolSearch loads it, its setup tool runs first, then the relay.
 
 **A widget tool in this run.** The call answered `branch: "widget"` and the sealed `html` (rendered from the data view the call built, which carries `"source_skill": "inbox"` — the widget's `crSrc`, the key `apply-choices` dispatches on): post it to `mcp__visualize__show_widget` as `widget_code`, verbatim — no minification, no whitespace stripping, no "trimming for size". The receipt already landed inside the call, so there is nothing to write after the widget. Then the Links section (Step 3 below), and STOP.
 

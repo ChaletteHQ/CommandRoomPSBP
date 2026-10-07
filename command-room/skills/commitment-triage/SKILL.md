@@ -240,6 +240,8 @@ spec of what the view contains, never a to-do list of separate commands):
 python3 shared/scripts/surface_drivers.py plate --workspace "<WORKSPACE>"
 ```
 
+**Load the widget tool before anything else** (`shared/CHAT_ACTION_WIDGET.md` § Finding the widget tool first): on the merged and half-merged seats it is deferred, and a listed deferred tool counts as present; ToolSearch loads it, its setup tool runs first, then the relay.
+
 Stdout carries `CR-PAGINATION: {...}` (empty for the board — it is not
 paged) followed by the persisted view's validated bytes between
 `CR-WIDGET-HTML-BEGIN` / `CR-WIDGET-HTML-END` markers. **Relay the bytes

@@ -26,10 +26,10 @@ Of the 276 substrate-opening blocks, **88 are INVOKED** — a `python3 -c`, a he
 | `references/PROJECT_MAPPING_RULES.md` | 106 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `references/RELEASE_MANIFEST.md` | 99 | `compute` | `_hq/`, `events.jsonl`, `workspace_root` | `release_manifest_helpers:<verb>` via `plan run_helper` |
 | `shared/CHAT_ACTION_WIDGET.md` | 54 | `plugin-only` | — | —  (exempt: opens no workspace path) |
-| `shared/CHAT_ACTION_WIDGET.md` | 585 | `render` | `<WORKSPACE>`, `WORKSPACE`, `_hq/` | `chat_action_widget_helpers:render_<surface>` + `plan write` |
-| `shared/CHAT_ACTION_WIDGET.md` | 626 | `render` | `<WORKSPACE>`, `WORKSPACE`, `_hq/` | `chat_action_widget_helpers:render_<surface>` + `plan write` |
+| `shared/CHAT_ACTION_WIDGET.md` | 596 | `render` | `<WORKSPACE>`, `WORKSPACE`, `_hq/` | `chat_action_widget_helpers:render_<surface>` + `plan write` |
+| `shared/CHAT_ACTION_WIDGET.md` | 637 | `render` | `<WORKSPACE>`, `WORKSPACE`, `_hq/` | `chat_action_widget_helpers:render_<surface>` + `plan write` |
 | `shared/COMMITMENT_SCHEMA.md` | 356 | `plugin-only` | — | —  (exempt: opens no workspace path) |
-| `shared/EMAIL_DRAFT_PROTOCOL.md` | 179 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `shared/EMAIL_DRAFT_PROTOCOL.md` | 181 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `shared/ENTITY_RESOLVE_PROTOCOL.md` | 23 | `read` | `workspace_root` | `entity_resolve_protocol_helpers:<verb>` via `plan run_helper` |
 | `shared/ENTITY_RESOLVE_PROTOCOL.md` | 45 | `read` | `$WORKSPACE` | `entity_resolve_protocol_helpers:<verb>` via `plan run_helper` |
 | `shared/ENTITY_RESOLVE_PROTOCOL.md` | 186 | `plugin-only` | — | —  (exempt: opens no workspace path) |
@@ -59,8 +59,8 @@ Of the 276 substrate-opening blocks, **88 are INVOKED** — a `python3 -c`, a he
 | `skills/apply-choices/SKILL.md` | 687 | `compute` | `WORKSPACE_ROOT` | `apply_choices_helpers:<verb>` via `plan run_helper` |
 | `skills/apply-choices/SKILL.md` | 730 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/apply-choices/SKILL.md` | 798 | `plugin-only` | — | —  (exempt: opens no workspace path) |
-| `skills/apply-choices/SKILL.md` | 890 | `write` | `_hq/`, `entities.json`, `events.jsonl`, `events_path`, `workspace_root` | `apply_choices_helpers:plan_<row>` + `plan append_jsonl` |
-| `skills/apply-choices/SKILL.md` | 1104 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/apply-choices/SKILL.md` | 892 | `write` | `_hq/`, `entities.json`, `events.jsonl`, `events_path`, `workspace_root` | `apply_choices_helpers:plan_<row>` + `plan append_jsonl` |
+| `skills/apply-choices/SKILL.md` | 1106 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/automation-scanner/SKILL.md` | 44 | `write` | `workspace_root` | `automation_scanner_helpers:plan_<row>` + `plan append_jsonl` |
 | `skills/balance/SKILL.md` | 88 | `compute` | `WORKSPACE` | `balance_helpers:<verb>` via `plan run_helper` |
 | `skills/balance/SKILL.md` | 124 | `write` | `WORKSPACE` | `balance_helpers:plan_<row>` + `plan append_jsonl` |
@@ -68,8 +68,8 @@ Of the 276 substrate-opening blocks, **88 are INVOKED** — a `python3 -c`, a he
 | `skills/board-pack-assembler/SKILL.md` | 230 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/board-pack-assembler/SKILL.md` | 334 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/calendar-writer/SKILL.md` | 112 | `render` | `<WORKSPACE>`, `WORKSPACE`, `_hq/` | `calendar_writer_helpers:render_<surface>` + `plan write` |
-| `skills/calendar-writer/SKILL.md` | 162 | `read` | `WORKSPACE_ROOT` | `calendar_writer_helpers:<verb>` via `plan run_helper` |
-| `skills/calendar-writer/SKILL.md` | 194 | `write` | `entities.json`, `events.jsonl`, `workspace_root` | `calendar_writer_helpers:plan_<row>` + `plan append_jsonl` |
+| `skills/calendar-writer/SKILL.md` | 163 | `read` | `WORKSPACE_ROOT` | `calendar_writer_helpers:<verb>` via `plan run_helper` |
+| `skills/calendar-writer/SKILL.md` | 195 | `write` | `entities.json`, `events.jsonl`, `workspace_root` | `calendar_writer_helpers:plan_<row>` + `plan append_jsonl` |
 | `skills/change-schedule/SKILL.md` | 53 | `compute` | `WORKSPACE`, `workspace_root` | `change_schedule_helpers:<verb>` via `plan run_helper` |
 | `skills/change-schedule/SKILL.md` | 78 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/change-schedule/SKILL.md` | 145 | `read` | `$WORKSPACE`, `_hq/`, `entities.json`, `workspace_root` | `change_schedule_helpers:<verb>` via `plan run_helper` |
@@ -131,17 +131,17 @@ Of the 276 substrate-opening blocks, **88 are INVOKED** — a `python3 -c`, a he
 | `skills/cleanup/SKILL.md` | 1286 | `compute` | `<WORKSPACE>`, `WORKSPACE` | `cleanup_helpers:<verb>` via `plan run_helper` |
 | `skills/cleanup/SKILL.md` | 1299 | `read` | `workspace_root` | `cleanup_helpers:<verb>` via `plan run_helper` |
 | `skills/command-room-coach/SKILL.md` | 378 | `read` | `workspace_root` | `command_room_coach_helpers:<verb>` via `plan run_helper` |
-| `skills/command-room-onboarding/SKILL.md` | 193 | `read` | `workspace_root` | `command_room_onboarding_helpers:<verb>` via `plan run_helper` |
-| `skills/command-room-onboarding/SKILL.md` | 330 | `plugin-only` | — | —  (exempt: opens no workspace path) |
-| `skills/command-room-onboarding/SKILL.md` | 482 | `write` | `workspace_root` | `command_room_onboarding_helpers:plan_<row>` + `plan append_jsonl` |
-| `skills/command-room-onboarding/SKILL.md` | 523 | `compute` | `workspace_root` | `command_room_onboarding_helpers:<verb>` via `plan run_helper` |
-| `skills/command-room-onboarding/SKILL.md` | 570 | `compute` | `workspace_root` | `command_room_onboarding_helpers:<verb>` via `plan run_helper` |
-| `skills/command-room-onboarding/SKILL.md` | 1106 | `write` | `workspace_root` | `command_room_onboarding_helpers:plan_<row>` + `plan append_jsonl` |
-| `skills/command-room-onboarding/SKILL.md` | 1116 | `write` | `workspace_root` | `command_room_onboarding_helpers:plan_<row>` + `plan append_jsonl` |
-| `skills/command-room-onboarding/SKILL.md` | 1126 | `write` | `workspace_root` | `command_room_onboarding_helpers:plan_<row>` + `plan append_jsonl` |
-| `skills/command-room-onboarding/SKILL.md` | 1133 | `write` | `workspace_root` | `command_room_onboarding_helpers:plan_<row>` + `plan append_jsonl` |
-| `skills/command-room-onboarding/SKILL.md` | 1144 | `compute` | `workspace_root` | `command_room_onboarding_helpers:<verb>` via `plan run_helper` |
-| `skills/command-room-onboarding/SKILL.md` | 1198 | `compute` | `workspace_root` | `command_room_onboarding_helpers:<verb>` via `plan run_helper` |
+| `skills/command-room-onboarding/SKILL.md` | 195 | `read` | `workspace_root` | `command_room_onboarding_helpers:<verb>` via `plan run_helper` |
+| `skills/command-room-onboarding/SKILL.md` | 332 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/command-room-onboarding/SKILL.md` | 484 | `write` | `workspace_root` | `command_room_onboarding_helpers:plan_<row>` + `plan append_jsonl` |
+| `skills/command-room-onboarding/SKILL.md` | 525 | `compute` | `workspace_root` | `command_room_onboarding_helpers:<verb>` via `plan run_helper` |
+| `skills/command-room-onboarding/SKILL.md` | 572 | `compute` | `workspace_root` | `command_room_onboarding_helpers:<verb>` via `plan run_helper` |
+| `skills/command-room-onboarding/SKILL.md` | 1108 | `write` | `workspace_root` | `command_room_onboarding_helpers:plan_<row>` + `plan append_jsonl` |
+| `skills/command-room-onboarding/SKILL.md` | 1118 | `write` | `workspace_root` | `command_room_onboarding_helpers:plan_<row>` + `plan append_jsonl` |
+| `skills/command-room-onboarding/SKILL.md` | 1128 | `write` | `workspace_root` | `command_room_onboarding_helpers:plan_<row>` + `plan append_jsonl` |
+| `skills/command-room-onboarding/SKILL.md` | 1135 | `write` | `workspace_root` | `command_room_onboarding_helpers:plan_<row>` + `plan append_jsonl` |
+| `skills/command-room-onboarding/SKILL.md` | 1146 | `compute` | `workspace_root` | `command_room_onboarding_helpers:<verb>` via `plan run_helper` |
+| `skills/command-room-onboarding/SKILL.md` | 1200 | `compute` | `workspace_root` | `command_room_onboarding_helpers:<verb>` via `plan run_helper` |
 | `skills/command-room-update-bridge/SKILL.md` | 128 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/command-room-update-bridge/SKILL.md` | 389 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/command-room-update-bridge/SKILL.md` | 408 | `plugin-only` | — | —  (exempt: opens no workspace path) |
@@ -164,23 +164,23 @@ Of the 276 substrate-opening blocks, **88 are INVOKED** — a `python3 -c`, a he
 | `skills/commitment-backlog-sweep/SKILL.md` | 228 | `compute` | `WORKSPACE` | `commitment_backlog_sweep_helpers:<verb>` via `plan run_helper` |
 | `skills/commitment-backlog-sweep/SKILL.md` | 259 | `read` | `WORKSPACE` | `commitment_backlog_sweep_helpers:<verb>` via `plan run_helper` |
 | `skills/commitment-backlog-sweep/SKILL.md` | 266 | `render` | `<WORKSPACE>`, `WORKSPACE`, `_hq/`, `workspace_root` | `commitment_backlog_sweep_helpers:render_<surface>` + `plan write` |
-| `skills/commitment-backlog-sweep/SKILL.md` | 303 | `compute` | `WORKSPACE` | `commitment_backlog_sweep_helpers:<verb>` via `plan run_helper` |
-| `skills/commitment-backlog-sweep/SKILL.md` | 321 | `write` | `WORKSPACE` | `commitment_backlog_sweep_helpers:plan_<row>` + `plan append_jsonl` |
-| `skills/commitment-backlog-sweep/SKILL.md` | 343 | `write` | `WORKSPACE` | `commitment_backlog_sweep_helpers:plan_<row>` + `plan append_jsonl` |
-| `skills/commitment-backlog-sweep/SKILL.md` | 358 | `write` | `WORKSPACE` | `commitment_backlog_sweep_helpers:plan_<row>` + `plan append_jsonl` |
-| `skills/commitment-backlog-sweep/SKILL.md` | 385 | `read` | `WORKSPACE` | `commitment_backlog_sweep_helpers:<verb>` via `plan run_helper` |
-| `skills/commitment-backlog-sweep/SKILL.md` | 420 | `write` | `WORKSPACE` | `commitment_backlog_sweep_helpers:plan_<row>` + `plan append_jsonl` |
-| `skills/commitment-backlog-sweep/SKILL.md` | 471 | `read` | `WORKSPACE` | `commitment_backlog_sweep_helpers:<verb>` via `plan run_helper` |
-| `skills/commitment-backlog-sweep/SKILL.md` | 502 | `compute` | `WORKSPACE` | `commitment_backlog_sweep_helpers:<verb>` via `plan run_helper` |
-| `skills/commitment-backlog-sweep/SKILL.md` | 539 | `write` | `WORKSPACE` | `commitment_backlog_sweep_helpers:plan_<row>` + `plan append_jsonl` |
-| `skills/commitment-backlog-sweep/SKILL.md` | 587 | `write` | `WORKSPACE` | `commitment_backlog_sweep_helpers:plan_<row>` + `plan append_jsonl` |
+| `skills/commitment-backlog-sweep/SKILL.md` | 305 | `compute` | `WORKSPACE` | `commitment_backlog_sweep_helpers:<verb>` via `plan run_helper` |
+| `skills/commitment-backlog-sweep/SKILL.md` | 323 | `write` | `WORKSPACE` | `commitment_backlog_sweep_helpers:plan_<row>` + `plan append_jsonl` |
+| `skills/commitment-backlog-sweep/SKILL.md` | 345 | `write` | `WORKSPACE` | `commitment_backlog_sweep_helpers:plan_<row>` + `plan append_jsonl` |
+| `skills/commitment-backlog-sweep/SKILL.md` | 360 | `write` | `WORKSPACE` | `commitment_backlog_sweep_helpers:plan_<row>` + `plan append_jsonl` |
+| `skills/commitment-backlog-sweep/SKILL.md` | 387 | `read` | `WORKSPACE` | `commitment_backlog_sweep_helpers:<verb>` via `plan run_helper` |
+| `skills/commitment-backlog-sweep/SKILL.md` | 422 | `write` | `WORKSPACE` | `commitment_backlog_sweep_helpers:plan_<row>` + `plan append_jsonl` |
+| `skills/commitment-backlog-sweep/SKILL.md` | 473 | `read` | `WORKSPACE` | `commitment_backlog_sweep_helpers:<verb>` via `plan run_helper` |
+| `skills/commitment-backlog-sweep/SKILL.md` | 504 | `compute` | `WORKSPACE` | `commitment_backlog_sweep_helpers:<verb>` via `plan run_helper` |
+| `skills/commitment-backlog-sweep/SKILL.md` | 541 | `write` | `WORKSPACE` | `commitment_backlog_sweep_helpers:plan_<row>` + `plan append_jsonl` |
+| `skills/commitment-backlog-sweep/SKILL.md` | 589 | `write` | `WORKSPACE` | `commitment_backlog_sweep_helpers:plan_<row>` + `plan append_jsonl` |
 | `skills/commitment-triage/SKILL.md` | 32 | `read` | `<WORKSPACE>`, `WORKSPACE` | `commitment_triage_helpers:<verb>` via `plan run_helper` |
 | `skills/commitment-triage/SKILL.md` | 120 | `compute` | `<WORKSPACE>`, `WORKSPACE` | `commitment_triage_helpers:<verb>` via `plan run_helper` |
 | `skills/commitment-triage/SKILL.md` | 238 | `read` | `--workspace`, `<WORKSPACE>`, `WORKSPACE` | `commitment_triage_helpers:<verb>` via `plan run_helper` |
-| `skills/commitment-triage/SKILL.md` | 299 | `compute` | `--workspace`, `<WORKSPACE>`, `WORKSPACE` | `commitment_triage_helpers:<verb>` via `plan run_helper` |
-| `skills/commitment-triage/SKILL.md` | 466 | `compute` | `--workspace`, `<WORKSPACE>`, `WORKSPACE` | `commitment_triage_helpers:<verb>` via `plan run_helper` |
-| `skills/commitment-triage/SKILL.md` | 501 | `compute` | `--workspace`, `<WORKSPACE>`, `WORKSPACE` | `commitment_triage_helpers:<verb>` via `plan run_helper` |
-| `skills/commitment-triage/SKILL.md` | 614 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/commitment-triage/SKILL.md` | 301 | `compute` | `--workspace`, `<WORKSPACE>`, `WORKSPACE` | `commitment_triage_helpers:<verb>` via `plan run_helper` |
+| `skills/commitment-triage/SKILL.md` | 468 | `compute` | `--workspace`, `<WORKSPACE>`, `WORKSPACE` | `commitment_triage_helpers:<verb>` via `plan run_helper` |
+| `skills/commitment-triage/SKILL.md` | 503 | `compute` | `--workspace`, `<WORKSPACE>`, `WORKSPACE` | `commitment_triage_helpers:<verb>` via `plan run_helper` |
+| `skills/commitment-triage/SKILL.md` | 616 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/contract-review/SKILL.md` | 129 | `read` | `workspace_root` | `contract_review_helpers:<verb>` via `plan run_helper` |
 | `skills/contract-review/SKILL.md` | 147 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/contract-review/SKILL.md` | 201 | `plugin-only` | — | —  (exempt: opens no workspace path) |
@@ -204,7 +204,7 @@ Of the 276 substrate-opening blocks, **88 are INVOKED** — a `python3 -c`, a he
 | `skills/email-writer/SKILL.md` | 386 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/email-writer/SKILL.md` | 427 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/email-writer/SKILL.md` | 465 | `render` | `<WORKSPACE>`, `WORKSPACE`, `_hq/` | `email_writer_helpers:render_<surface>` + `plan write` |
-| `skills/email-writer/SKILL.md` | 732 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/email-writer/SKILL.md` | 733 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/enable-command-room-schedules/SKILL.md` | 53 | `read` | `workspace_root` | `enable_command_room_schedules_helpers:<verb>` via `plan run_helper` |
 | `skills/enable-command-room-schedules/SKILL.md` | 201 | `read` | `$WORKSPACE` | `enable_command_room_schedules_helpers:<verb>` via `plan run_helper` |
 | `skills/enable-command-room-schedules/SKILL.md` | 294 | `compute` | `WORKSPACE`, `workspace_root` | `enable_command_room_schedules_helpers:<verb>` via `plan run_helper` |
@@ -224,36 +224,36 @@ Of the 276 substrate-opening blocks, **88 are INVOKED** — a `python3 -c`, a he
 | `skills/enable-command-room-schedules/references/SHARED_CHAT_OUTPUT_PROTOCOL.md` | 154 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/enable-command-room-schedules/references/orchestrator-commitments.md` | 311 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/enable-command-room-schedules/references/orchestrator-commitments.md` | 634 | `plugin-only` | — | —  (exempt: opens no workspace path) |
-| `skills/enable-command-room-schedules/references/orchestrator-commitments.md` | 724 | `plugin-only` | — | —  (exempt: opens no workspace path) |
-| `skills/enable-command-room-schedules/references/orchestrator-commitments.md` | 791 | `plugin-only` | — | —  (exempt: opens no workspace path) |
-| `skills/enable-command-room-schedules/references/orchestrator-commitments.md` | 842 | `plugin-only` | — | —  (exempt: opens no workspace path) |
-| `skills/enable-command-room-schedules/references/orchestrator-commitments.md` | 865 | `plugin-only` | — | —  (exempt: opens no workspace path) |
-| `skills/enable-command-room-schedules/references/orchestrator-commitments.md` | 889 | `plugin-only` | — | —  (exempt: opens no workspace path) |
-| `skills/enable-command-room-schedules/references/orchestrator-commitments.md` | 1143 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/enable-command-room-schedules/references/orchestrator-commitments.md` | 726 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/enable-command-room-schedules/references/orchestrator-commitments.md` | 793 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/enable-command-room-schedules/references/orchestrator-commitments.md` | 844 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/enable-command-room-schedules/references/orchestrator-commitments.md` | 867 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/enable-command-room-schedules/references/orchestrator-commitments.md` | 891 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/enable-command-room-schedules/references/orchestrator-commitments.md` | 1145 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/enable-command-room-schedules/references/orchestrator-morning-brief.md` | 131 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/enable-command-room-schedules/references/orchestrator-morning-brief.md` | 412 | `plugin-only` | — | —  (exempt: opens no workspace path) |
-| `skills/enable-command-room-schedules/references/orchestrator-my-plate.md` | 186 | `plugin-only` | — | —  (exempt: opens no workspace path) |
-| `skills/enable-command-room-schedules/references/orchestrator-my-plate.md` | 202 | `plugin-only` | — | —  (exempt: opens no workspace path) |
-| `skills/enable-command-room-schedules/references/orchestrator-my-plate.md` | 217 | `plugin-only` | — | —  (exempt: opens no workspace path) |
-| `skills/enable-command-room-schedules/references/orchestrator-my-plate.md` | 266 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/enable-command-room-schedules/references/orchestrator-my-plate.md` | 188 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/enable-command-room-schedules/references/orchestrator-my-plate.md` | 204 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/enable-command-room-schedules/references/orchestrator-my-plate.md` | 219 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/enable-command-room-schedules/references/orchestrator-my-plate.md` | 268 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/enable-command-room-schedules/references/orchestrator-past-meetings.md` | 792 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/enable-command-room-schedules/references/orchestrator-past-meetings.md` | 1280 | `plugin-only` | — | —  (exempt: opens no workspace path) |
-| `skills/enable-command-room-schedules/references/orchestrator-past-meetings.md` | 1668 | `plugin-only` | — | —  (exempt: opens no workspace path) |
-| `skills/enable-command-room-schedules/references/orchestrator-past-meetings.md` | 1698 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/enable-command-room-schedules/references/orchestrator-past-meetings.md` | 1670 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/enable-command-room-schedules/references/orchestrator-past-meetings.md` | 1700 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/follow-up-ritual/SKILL.md` | 60 | `write` | `workspace_root` | `follow_up_ritual_helpers:plan_<row>` + `plan append_jsonl` |
 | `skills/follow-up-ritual/SKILL.md` | 91 | `write` | `workspace_root` | `follow_up_ritual_helpers:plan_<row>` + `plan append_jsonl` |
 | `skills/follow-up-ritual/SKILL.md` | 184 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/follow-up-ritual/SKILL.md` | 246 | `render` | `<WORKSPACE>`, `WORKSPACE`, `_hq/` | `follow_up_ritual_helpers:render_<surface>` + `plan write` |
-| `skills/follow-up-ritual/SKILL.md` | 310 | `write` | `workspace_root` | `follow_up_ritual_helpers:plan_<row>` + `plan append_jsonl` |
-| `skills/follow-up-ritual/SKILL.md` | 543 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/follow-up-ritual/SKILL.md` | 311 | `write` | `workspace_root` | `follow_up_ritual_helpers:plan_<row>` + `plan append_jsonl` |
+| `skills/follow-up-ritual/SKILL.md` | 544 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/inbox-triage/SKILL.md` | 181 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/inbox-triage/SKILL.md` | 425 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/insight-generator/SKILL.md` | 223 | `write` | `<WORKSPACE>`, `WORKSPACE` | `insight_generator_helpers:plan_<row>` + `plan append_jsonl` |
 | `skills/intro-broker/SKILL.md` | 44 | `write` | `workspace_root` | `intro_broker_helpers:plan_<row>` + `plan append_jsonl` |
 | `skills/intro-broker/SKILL.md` | 119 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/intro-broker/SKILL.md` | 178 | `render` | `<WORKSPACE>`, `WORKSPACE`, `_hq/` | `intro_broker_helpers:render_<surface>` + `plan write` |
-| `skills/intro-broker/SKILL.md` | 318 | `plugin-only` | — | —  (exempt: opens no workspace path) |
-| `skills/intro-broker/SKILL.md` | 325 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/intro-broker/SKILL.md` | 319 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/intro-broker/SKILL.md` | 326 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/log-resolution/SKILL.md` | 63 | `read` | `workspace_root` | `log_resolution_helpers:<verb>` via `plan run_helper` |
 | `skills/log-resolution/SKILL.md` | 109 | `read` | `entities.json`, `workspace_root` | `log_resolution_helpers:<verb>` via `plan run_helper` |
 | `skills/meeting-notes/SKILL.md` | 77 | `write` | `workspace_root` | `meeting_notes_helpers:plan_<row>` + `plan append_jsonl` |
@@ -275,9 +275,9 @@ Of the 276 substrate-opening blocks, **88 are INVOKED** — a `python3 -c`, a he
 | `skills/meeting-notes/SKILL.md` | 1045 | `read` | `<WORKSPACE>`, `WORKSPACE` | `meeting_notes_helpers:<verb>` via `plan run_helper` |
 | `skills/meeting-notes/SKILL.md` | 1069 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/meeting-notes/SKILL.md` | 1124 | `render` | `<WORKSPACE>`, `WORKSPACE`, `_hq/` | `meeting_notes_helpers:render_<surface>` + `plan write` |
-| `skills/meeting-notes/SKILL.md` | 1146 | `read` | `<WORKSPACE>`, `WORKSPACE`, `_hq/` | `meeting_notes_helpers:<verb>` via `plan run_helper` |
-| `skills/meeting-notes/SKILL.md` | 1166 | `compute` | `<WORKSPACE>`, `WORKSPACE` | `meeting_notes_helpers:<verb>` via `plan run_helper` |
-| `skills/meeting-notes/SKILL.md` | 1183 | `plugin-only` | — | —  (exempt: opens no workspace path) |
+| `skills/meeting-notes/SKILL.md` | 1147 | `read` | `<WORKSPACE>`, `WORKSPACE`, `_hq/` | `meeting_notes_helpers:<verb>` via `plan run_helper` |
+| `skills/meeting-notes/SKILL.md` | 1167 | `compute` | `<WORKSPACE>`, `WORKSPACE` | `meeting_notes_helpers:<verb>` via `plan run_helper` |
+| `skills/meeting-notes/SKILL.md` | 1184 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/memo-writer/SKILL.md` | 19 | `write` | `workspace_root` | `memo_writer_helpers:plan_<row>` + `plan append_jsonl` |
 | `skills/memo-writer/SKILL.md` | 81 | `write` | `workspace_root` | `memo_writer_helpers:plan_<row>` + `plan append_jsonl` |
 | `skills/memo-writer/SKILL.md` | 193 | `plugin-only` | — | —  (exempt: opens no workspace path) |
@@ -288,13 +288,13 @@ Of the 276 substrate-opening blocks, **88 are INVOKED** — a `python3 -c`, a he
 | `skills/morning-briefing/SKILL.md` | 721 | `plugin-only` | — | —  (exempt: opens no workspace path) |
 | `skills/needs-your-call/SKILL.md` | 284 | `read` | `$WORKSPACE` | `needs_your_call_helpers:<verb>` via `plan run_helper` |
 | `skills/needs-your-call/SKILL.md` | 377 | `read` | `<WORKSPACE>`, `WORKSPACE` | `needs_your_call_helpers:<verb>` via `plan run_helper` |
-| `skills/needs-your-call/SKILL.md` | 489 | `read` | `<WORKSPACE>`, `WORKSPACE` | `needs_your_call_helpers:<verb>` via `plan run_helper` |
-| `skills/needs-your-call/SKILL.md` | 626 | `compute` | `$WORKSPACE` | `needs_your_call_helpers:<verb>` via `plan run_helper` |
-| `skills/needs-your-call/SKILL.md` | 634 | `render` | `<WORKSPACE>`, `WORKSPACE`, `_hq/` | `needs_your_call_helpers:render_<surface>` + `plan write` |
-| `skills/needs-your-call/SKILL.md` | 689 | `read` | `<WORKSPACE>`, `WORKSPACE` | `needs_your_call_helpers:<verb>` via `plan run_helper` |
+| `skills/needs-your-call/SKILL.md` | 490 | `read` | `<WORKSPACE>`, `WORKSPACE` | `needs_your_call_helpers:<verb>` via `plan run_helper` |
+| `skills/needs-your-call/SKILL.md` | 627 | `compute` | `$WORKSPACE` | `needs_your_call_helpers:<verb>` via `plan run_helper` |
+| `skills/needs-your-call/SKILL.md` | 635 | `render` | `<WORKSPACE>`, `WORKSPACE`, `_hq/` | `needs_your_call_helpers:render_<surface>` + `plan write` |
+| `skills/needs-your-call/SKILL.md` | 690 | `read` | `<WORKSPACE>`, `WORKSPACE` | `needs_your_call_helpers:<verb>` via `plan run_helper` |
 | `skills/needs-your-call/references/held-review-mode.md` | 77 | `read` | `<WORKSPACE>`, `WORKSPACE` | `needs_your_call_helpers:<verb>` via `plan run_helper` |
-| `skills/needs-your-call/references/held-review-mode.md` | 138 | `compute` | `<WORKSPACE>`, `WORKSPACE` | `needs_your_call_helpers:<verb>` via `plan run_helper` |
-| `skills/needs-your-call/references/held-review-mode.md` | 175 | `compute` | `<WORKSPACE>`, `WORKSPACE` | `needs_your_call_helpers:<verb>` via `plan run_helper` |
+| `skills/needs-your-call/references/held-review-mode.md` | 139 | `compute` | `<WORKSPACE>`, `WORKSPACE` | `needs_your_call_helpers:<verb>` via `plan run_helper` |
+| `skills/needs-your-call/references/held-review-mode.md` | 176 | `compute` | `<WORKSPACE>`, `WORKSPACE` | `needs_your_call_helpers:<verb>` via `plan run_helper` |
 | `skills/objectives/SKILL.md` | 36 | `write` | `workspace_root` | `objectives_helpers:plan_<row>` + `plan append_jsonl` |
 | `skills/objectives/SKILL.md` | 77 | `read` | `workspace_root` | `objectives_helpers:<verb>` via `plan run_helper` |
 | `skills/objectives/SKILL.md` | 167 | `read` | `workspace_root` | `objectives_helpers:<verb>` via `plan run_helper` |

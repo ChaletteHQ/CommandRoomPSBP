@@ -276,6 +276,8 @@ transport = render_and_persist(
     persist_dir="<WORKSPACE>/_hq/.system/widgets", page=1)
 ```
 
+**Load the widget tool before anything else** (`shared/CHAT_ACTION_WIDGET.md` § Finding the widget tool first): on the merged and half-merged seats it is deferred, and a listed deferred tool counts as present; ToolSearch loads it, its setup tool runs first, then the relay.
+
 Relay `transport["html"]` verbatim as `mcp__visualize__show_widget`'s
 `widget_code`. Never hand-write the widget HTML and never write it anywhere else —
 the rendered digest already carries the coverage block (what was read, what could

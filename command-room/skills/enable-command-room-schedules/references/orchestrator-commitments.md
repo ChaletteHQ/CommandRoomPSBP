@@ -674,6 +674,8 @@ python3 "$RT/shared/scripts/workspace_access.py" write --json '{"data": "<the ht
 python3 "$RT/shared/scripts/workspace_access.py" append_jsonl --json '{"holder": "commitments", "rel": "_hq/data/events.jsonl", "rows": [<every row in pending_rows from the render answer above, in order>]}'
 ```
 
+**Load the widget tool before anything else** (`shared/CHAT_ACTION_WIDGET.md` § Finding the widget tool first): on the merged and half-merged seats it is deferred, and a listed deferred tool counts as present; ToolSearch loads it, its setup tool runs first, then the relay.
+
 Then pass the answer's `html` to `mcp__visualize__show_widget` as `widget_code`, verbatim, and write the Phase 8 receipt (this path has no driver receipt).
 
 **Why this rule exists:** in v2.14.18 the agent fired this orchestrator with 0 items qualifying after the bucket filter, judged the canonical empty-state as worse UX than a richer custom card, and bypassed the renderer entirely. Result: a hand-typed widget with hardcoded "Needing action: 0" counter, four model-improvised bottom buttons (`Show all open`, `Add email for Sloan`, `Add Bowie as contact`, `Prep deep work: EB-5`), and zero validators run. Three contracts broken at once (Rule 1 widget format, Rule 5 canonical actions, Rule 19 data shape) — the enforcement chain is structurally unable to catch a renderer bypass because the validators run AT render time. The fix is to make the canonical empty-state look good enough that the agent has no incentive to improvise. NEVER hand-build the empty-state widget, even if you think the canonical version is mid-tier UX. If the canonical UX feels wrong, file a follow-up to improve `_render_all_clear_summary` in `chat_output_renderer.py` — do not improvise around it.
@@ -775,7 +777,7 @@ python3 "$RT/shared/scripts/workspace_access.py" append_jsonl --json '{"holder":
 
 Then pass `html` to `mcp__visualize__show_widget` as `widget_code`, verbatim — never a hand-composed variant, never a post-processed one. This path writes no receipt of its own: the fire's receipt is Phase 8's `commitments_helpers:plan_commitments_receipt` on this path, or the driver's own on the driver's.
 
-**When `mcp__visualize__show_widget` is ABSENT from this session's tool list** (the "Require this computer" scheduled shape carries no widget tool — R-RW2-7 (a)), the list still lands, as text — the ONE sanctioned non-widget surface, in this order: (i) land the page exactly as above (the driver already did; a hand-shaped view goes through `plan write`); (ii) render the same view as text, one call:
+**When `mcp__visualize__show_widget` is ABSENT from this session's tool list after the load in `shared/CHAT_ACTION_WIDGET.md` § Finding the widget tool first (a listed deferred tool counts as present: it is loaded, never read as absent)** (the "Require this computer" scheduled shape carries no widget tool — R-RW2-7 (a)), the list still lands, as text — the ONE sanctioned non-widget surface, in this order: (i) land the page exactly as above (the driver already did; a hand-shaped view goes through `plan write`); (ii) render the same view as text, one call:
 
 ```bash
 python3 "$RT/shared/scripts/workspace_access.py" run_helper --json '{"args": {"data_view": <the hand-shaped view, or OMIT the key after the driver>, "workspace_root": "<WS>"}, "name": "commitments_helpers:render_waiting_on_text"}'

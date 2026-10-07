@@ -85,7 +85,7 @@ Other skills and mid-task turns hand email drafts off to THIS skill instead of c
 
 **The chained back half is where live fires freelance (EW2+T — F-07/F-08: delegation landed 3/3, the protocol below held only 1/3). These four rules bind a chained fire exactly as hard as a direct one:**
 
-1. **MUST render the editable widget** — via the Phase 4 transport (`widget_transport.render_and_persist` → `show_widget` (`transport["html"]` as `widget_code`)). The widget is the ONLY draft surface. Inline chat text, a markdown preview, a blockquoted "here's the draft:" — none of those is a render. If you have draft text on screen and no widget, you are mid-violation (this was 2 of 3 live fires).
+1. **MUST render the editable widget** — via the Phase 4 transport (`widget_transport.render_and_persist` → `show_widget` (`transport["html"]` as `widget_code`)). The widget is the ONLY draft surface. Inline chat text, a markdown preview, a blockquoted "here's the draft:" — none of those is a render. If you have draft text on screen and no widget, you are mid-violation (this was 2 of 3 live fires). **Load the widget tool before anything else** (`shared/CHAT_ACTION_WIDGET.md` § Finding the widget tool first): on the merged and half-merged seats it is deferred, and a listed deferred tool counts as present; ToolSearch loads it, its setup tool runs first, then the relay.
 2. **MUST NOT create any connector draft, send, or queue anything pre-click.** The MUST-language preamble below binds chained fires verbatim — "I'll just queue it to the mail backend's Drafts so it's ready" is the exact live failure (an eager Superhuman queue with no widget and no event). Nothing touches the mail backend until the user's widget click dispatches through apply-choices.
 3. **Event writes stay at apply-choices** (the lazy contract, unchanged): chained invocation changes the ENTRY point, never the exit. No `email_drafted` append from this skill's own path — the click owns it.
 4. **No-address recovery — never a guess (Bug #44 verb, pinned here after F-08).** When the resolved recipient has no actionable email on file, render the widget anyway with the `add email then send` recovery verb and an empty To:. **Address inference is BANNED:** never derive a recipient address from the org's email-address pattern, a coworker's address shape, a domain convention, or any "most likely" construction — not even presented as a suggestion behind a confirm. The one live guess gated behind a confirm and was still WRONG; a plausible wrong address is worse than an empty field, because the user rubber-stamps plausible. Investigate context, say plainly no address is on file, offer the recovery paths — that observed behavior is the contract.
@@ -525,6 +525,7 @@ print(transport['html'])
 # Pass transport["html"] (the persisted page's validated bytes, verbatim) to
 # mcp__visualize__show_widget as widget_code (T2 — shared/CHAT_ACTION_WIDGET.md
 # § Transport). Never hand-compose or post-process the HTML.
+# Load the widget tool first (shared/CHAT_ACTION_WIDGET.md § Finding the widget tool first): a listed deferred tool counts as present; ToolSearch select:mcp__visualize__show_widget,mcp__visualize__read_me, call read_me, then relay.
 ```
 
 **Action semantics (handled by apply-choices — mail-backend tool calls fire HERE, not in Phase 4):**

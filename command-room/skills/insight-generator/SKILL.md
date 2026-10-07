@@ -247,6 +247,8 @@ This is the **only user-interactive pass** in the skill. It exists because silen
 
 Cap the review batch at **25 events** per session. If more exist, queue the excess for the next pass.
 
+**Load the widget tool before anything else** (`shared/CHAT_ACTION_WIDGET.md` § Finding the widget tool first): on the merged and half-merged seats it is deferred, and a listed deferred tool counts as present; ToolSearch loads it, its setup tool runs first, then the relay.
+
 **Review UX — a widget, not a typed-reply table (P1.1/P1.5 2026-07-02; the pre-v3.13.0 "reply with row-# + action" grammar is retired — it could never render through the validator).** Render via `render_chat_output_widget()` as REVIEW items, one per candidate, posted via `widget_transport.render_and_persist` → `show_widget` (`transport["html"]` as `widget_code`) (`shared/CHAT_ACTION_WIDGET.md` § Transport). The layout below defines CONTENT only — what each item carries — never the transport:
 
 ```

@@ -98,6 +98,8 @@ On the very first convene with no `boardroom.json`, do NOT interrogate first: ru
 On `configure my board` / `change my board`: load current bench, let M drop seats, sharpen a mandate, rename, add from the seat library (CTO/product, General Counsel/risk, CPO/people, Brand/comms), or **add a persona seat** from any advisor in `list_advisors()`. Cap six. Save via `save_skill_config`. `show my board` renders the current bench read-only; `reset my board` wipes the config.
 
 ### Round 1 — the grilling (skippable)
+**Load the widget tool before anything else** (`shared/CHAT_ACTION_WIDGET.md` § Finding the widget tool first): on the merged and half-merged seats it is deferred, and a listed deferred tool counts as present; ToolSearch loads it, its setup tool runs first, then the relay.
+
 Each seat reads its substrate slice and asks **its single hardest question** — the one M would least want asked. All questions surface together in one widget rendered via `shared/scripts/chat_output_renderer.py::render_chat_output_widget()` and posted via `widget_transport.render_and_persist` → `show_widget` (`transport["html"]` as `widget_code`) per `shared/CHAT_ACTION_WIDGET.md` § Transport — never markdown numbered actions — each with an answer field, plus one widget-level **`skip all`** action (canonical bulk verb — displays "Skip all"; the intro line above the widget says "answer any, or skip all to go straight to verdicts"; dispatch in apply-choices' `boardroom` source entry). The user answers inline, selectively, or skips all. The trigger `quick board take on` skips Round 1 entirely.
 
 ### Round 2 — verdicts (parallel subagents)

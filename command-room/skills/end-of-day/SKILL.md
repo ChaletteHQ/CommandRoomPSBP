@@ -262,7 +262,7 @@ key and its own resolver.
   `show_widget`'s `widget_code`, beside the composed text. Never re-render it,
   never restyle it, never build a card of your own: the day-close still has no
   card of its own and this is the one cited exception (R-N10-3). No transport
-  on the pack means no card — post the text and stop.
+  on the pack means no card — post the text and stop. **Load the widget tool before anything else** (`shared/CHAT_ACTION_WIDGET.md` § Finding the widget tool first): on the merged and half-merged seats it is deferred, and a listed deferred tool counts as present; ToolSearch loads it, its setup tool runs first, then the relay.
 - **Each row carries exactly ONE tap, the pre-picked `confirm`.** That is the
   design rule (one tap each, the likely answer already picked, no three-way
   menus). The other three queue verbs still exist and still work — on

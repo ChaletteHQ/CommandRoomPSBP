@@ -284,8 +284,8 @@ def run_staff_meeting_surface(workspace_root: str, *, page: int = 1,
         # S-13 (PARALLEL-B lane A): see plate_helpers.run_my_plate_surface —
         # the same text form for a run with no widget tool; the confirm queue
         # with row numbers, then the change feed, then this week's moves.
-        from inbox_helpers import WIDGET_TOOL, _tool_names
-        _widget = WIDGET_TOOL in _tool_names(tools)
+        from inbox_helpers import widget_tool_name
+        _widget = widget_tool_name(tools) is not None
         kwargs["extra_receipt_data"] = {"receipt_flags": {
             "widget_rendered": True, "widget_posted": _widget,
             "text_fallback": not _widget, "push_planned": True}}

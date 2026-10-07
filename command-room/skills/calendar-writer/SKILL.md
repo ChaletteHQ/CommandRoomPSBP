@@ -149,6 +149,7 @@ transport = render_and_persist(data_view=data_view, wrapper="fragment",
 # Pass transport["html"] to mcp__visualize__show_widget as widget_code (persisted page bytes, verbatim) (EW2+T, F-15 —
 # shared/CHAT_ACTION_WIDGET.md § Transport; validators fire inside the call).
 # STOP. Wait for the user's apply-choices reply.
+# Load the widget tool first (shared/CHAT_ACTION_WIDGET.md § Finding the widget tool first): a listed deferred tool counts as present; ToolSearch select:mcp__visualize__show_widget,mcp__visualize__read_me, call read_me, then relay.
 ```
 
 The card is `send` / `skip` (FB-17 — `edit then send` retired; the popup multi-field editor is gone). The agenda body is directly editable on the card (FB-10). To change the time, attendees, or title before creating, the user says the correction in chat and the card re-renders — never a popup form. The Calendar MCP write doesn't fire until the user confirms via Apply.

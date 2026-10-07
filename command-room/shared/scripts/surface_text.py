@@ -27,7 +27,7 @@ from typing import Any, Dict, List, Optional
 
 # The tool names the inbox delivery planner keys on — ONE spelling, theirs.
 from inbox_helpers import (ARTIFACT_TOOL, CONTAINER_PAGE_DIR, SEND_FILE_TOOL,
-                           SEND_MESSAGE_TOOL, WIDGET_TOOL, _landed_page,
+                           SEND_MESSAGE_TOOL, WIDGET_TOOL, _landed_page, widget_tool_name,
                            _tool_names, text_row_line, widget_absent_line)
 
 __all__ = [
@@ -272,11 +272,12 @@ def plan_text_delivery(workspace_root: str, *, tools, page_rel: str, text: str,
         device_root = str(os.environ.get("CR_DEVICE_WORKSPACE", "") or "").strip() or None
     names = _tool_names(tools)
     out: Dict[str, Any] = {"calls": [], "rows": [], "lines": []}
-    if WIDGET_TOOL in names:
+    widget_tool = widget_tool_name(tools)
+    if widget_tool:
         out.update({"branch": "widget", "push": push,
                     "receipt_flags": {"widget_rendered": True, "widget_posted": True,
                                       "text_fallback": False, "push_planned": True}})
-        out["calls"].append({"tool": WIDGET_TOOL})
+        out["calls"].append({"tool": widget_tool})
         return out
     closing = saved_at_line(page_rel, device_root)
     body_lines = [text.rstrip("\n"), "", closing] if text else [closing]

@@ -2815,7 +2815,7 @@ CONFIG_CHANGE_REASONS: tuple = (
     "fold1a_undo",
     "readiness_retirement",
     REASON_SCHEDULER_UNAVAILABLE,
-    "reenabled_after_missed_run",  # FIRE3 (D-T3-3): the maintenance fire switched its own chat back on (`maintenance_dispatcher.own_chat_state`)
+    "reenabled_after_missed_run",  # FIRE3 (D-T3-3): the maintenance fire switched a chat back on (`maintenance_dispatcher.own_chat_state`; every roster chat since CHATSON1, `chats_state`)
 )
 
 #: Spec §7.3, verbatim. Used only when `schedule_backend` is not importable.

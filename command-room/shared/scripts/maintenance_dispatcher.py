@@ -2361,18 +2361,40 @@ def fire_close_line(envelopes, reenabled=None) -> str:
 # in ONE plain line - never silent, never twice. A chat the CUSTOMER paused
 # (`schedule_config` carries `enabled: false` for it) is never switched on.
 
+#
+# CHATSON1 (hotfix, 2026-10-06, ChaletteHQ/cr1#98): the same walk showed the
+# Morning Brief off too, and this path only ever looked at the fire's own
+# chat - every other registered chat stayed off until somebody noticed. The
+# fire now checks EVERY chat on the live roster (`chats_state`), under the
+# same guards: the scheduler's listing must show the trigger off, a chat the
+# customer paused is never touched, a retired or superseded id is never
+# touched, and it is still said in ONE line - naming every chat it switched on.
+
 #: The one line, with the chat's display name in the one slot. It names the
 #: chat and nothing about tools or ids; validated with the fire families on.
 REENABLED_LINE_FORM = ("Your {chat} chat had been switched off by the Claude "
                        "app after a missed run; it is back on now.")
 
+#: CHATSON1 - the same line for several chats at once, their display names
+#: joined ("Morning Brief, Inbox and Maintenance") in the one slot.
+REENABLED_LINES_FORM = ("Your {chats} chats had been switched off by the "
+                        "Claude app after a missed run; they are back on now.")
+
+
+def _join_names(names) -> str:
+    names = list(names)
+    if len(names) <= 1:
+        return "".join(names)
+    return ", ".join(names[:-1]) + " and " + names[-1]
+
 
 def reenabled_line(task_ids) -> str:
-    """The ONE line for a chat this fire switched back on, or "".
+    """The ONE line for the chats this fire switched back on, or "".
 
-    `task_ids` is the fire's own chat id (a string) or an iterable of the ids
-    it switched on; the line is rendered ONCE, for the first id, however many
-    times it was handed in (R-WALK-1: once, never twice)."""
+    `task_ids` is one chat id (a string) or an iterable of the ids it switched
+    on; the line is rendered ONCE, naming each distinct chat once in the
+    order handed in, however many times an id was handed in (R-WALK-1: once,
+    never twice). An id with no display name is left out of the line."""
     if isinstance(task_ids, str):
         ids = [task_ids]
     else:
@@ -2381,10 +2403,16 @@ def reenabled_line(task_ids) -> str:
         return ""
     from schedule_config import DISPLAY_NAMES
 
-    chat = DISPLAY_NAMES.get(ids[0])
-    if not chat:
+    names = []
+    for task_id in ids:
+        chat = DISPLAY_NAMES.get(task_id)
+        if chat and chat not in names:
+            names.append(chat)
+    if not names:
         return ""
-    return REENABLED_LINE_FORM.format(chat=chat)
+    if len(names) == 1:
+        return REENABLED_LINE_FORM.format(chat=names[0])
+    return REENABLED_LINES_FORM.format(chats=_join_names(names))
 
 
 #: T3 FIRE3 MUST 1 - the re-enable's ONE receipt: its writer (on the write
@@ -2484,40 +2512,101 @@ def needs_reenable(own_chat, listed) -> bool:
     return bool(matched) and all(row.get("enabled") is False for row in matched)
 
 
+def reenable_candidates(workspace_root) -> list:
+    """CHATSON1 - the chat ids a maintenance fire may switch back on.
+
+    Every id with a stored trigger (`schedule_backend.read_trigger_map`) that
+    is on the live roster (`schedule_config.DEFAULT_SCHEDULES`) - and so never
+    a retired, renamed or superseded id, which the roster does not carry: a
+    retired chat is the customer's to switch off (LIFECYCLE1) and a superseded
+    one was switched off on purpose (MAINT1). The fire's own chat comes first;
+    the rest in roster order. A customer's pause is applied by `own_chat_state`
+    per id, not here."""
+    try:
+        from schedule_backend import read_trigger_map
+        from schedule_config import DEFAULT_SCHEDULES, RETIRED_TASKS, SUPERSEDED_BY
+    except Exception:  # noqa: BLE001 - an older tree: nothing to offer
+        return []
+    try:
+        stored = read_trigger_map(workspace_root)
+    except Exception:  # noqa: BLE001
+        return []
+    superseded = {t for ids in SUPERSEDED_BY.values() for t in ids}
+    out = []
+    for task_id in ["maintenance"] + [t for t in DEFAULT_SCHEDULES
+                                      if t != "maintenance"]:
+        if task_id in RETIRED_TASKS or task_id in superseded:
+            continue
+        row = stored.get(task_id)
+        if isinstance(row, dict) and row.get("trigger_id"):
+            out.append(task_id)
+    return out
+
+
+def chats_state(workspace_root, listed=None) -> dict:
+    """CHATSON1 - `own_chat_state` for EVERY chat on the roster - READ ONLY.
+
+    `{chats, reenable, check_listing, line}`: `chats` is one `own_chat_state`
+    answer per candidate id (`reenable_candidates`, each carrying its
+    `task_id`); `reenable` is the list of the offers among them that are not
+    null - each with the `task_id` it switches on - and is EMPTY until the
+    scheduler's rows are handed in as `listed` (the plan's own answer offers
+    nothing and sets `check_listing` true when there is anything to look
+    for, exactly as `own_chat_state` does); `line` is the ONE line naming
+    every chat in `reenable`, "" when there are none. The guards are the
+    per-id ones: the listing must show that chat's trigger off, and a chat
+    the customer paused is never offered."""
+    out = {"chats": [], "reenable": [], "check_listing": False, "line": ""}
+    for task_id in reenable_candidates(workspace_root):
+        state = own_chat_state(workspace_root, task_id, listed)
+        out["chats"].append(state)
+        if state.get("check_listing"):
+            out["check_listing"] = True
+        offer = state.get("reenable")
+        if offer:
+            out["reenable"].append(dict(offer, task_id=task_id))
+    out["line"] = reenabled_line([o["task_id"] for o in out["reenable"]])
+    return out
+
+
 def _own_chat_steps(pair: str) -> str:
     """M1b - the fire's own chat (MUST 4, R-WALK-1), on every verdict.
 
     T2B FIRE3B MUST 1 (F-T2-13): the plan never carries the switch-on call.
     The step lists the scheduler's chats ONCE, hands those rows to ONE read
-    of `own_chat_state` with `listed`, and acts only on a non-null
-    `reenable` in THAT answer."""
+    of `chats_state` with `listed`, and acts only on the entries of
+    `reenable` in THAT answer.
+
+    CHATSON1 (#98): the read is `chats_state`, every chat on the roster, not
+    `own_chat_state`, the fire's own; the answer's `reenable` is a list, one
+    entry per chat the listing showed off, and the line names them all."""
     return (
-        "    ITS OWN CHAT (M1b), before the verdict below and on every "
-        "verdict but `root_blocked`: the plan's `own_chat.reenable` is "
-        "always null; act on nothing in the plan itself. When "
-        "`own_chat.check_listing` is true, list the scheduler's chats ONCE, "
+        "    ITS OWN CHAT AND THE OTHERS (M1b), before the verdict below and "
+        "on every verdict but `root_blocked`: the plan's `chats.reenable` is "
+        "always empty; act on nothing in the plan itself. When "
+        "`chats.check_listing` is true, list the scheduler's chats ONCE, "
         "then ask ONE question beside the data "
         "with those rows, each as {\"id\": <its id>, \"enabled\": <true or "
         "false>} and nothing else -\n"
         + _m_line(pair, "run_helper",
-                  '{"args": {"listed": [<the rows>], "task_id": '
-                  '"maintenance", "workspace_root": "<WS>"}, "name": '
-                  '"maintenance_dispatcher:own_chat_state"}') +
-        "    ONLY when THAT answer's `reenable` is not null (the listing "
-        "showed this chat switched off by the app after a missed run): make "
-        "`reenable.call` exactly, and only when that call succeeded write "
-        "each of its `receipts` through the write door with the arguments "
-        "it carries plus \"workspace_root\" -\n"
+                  '{"args": {"listed": [<the rows>], "workspace_root": '
+                  '"<WS>"}, "name": "maintenance_dispatcher:chats_state"}') +
+        "    For EACH entry of THAT answer's `reenable` (one per Command Room "
+        "chat the listing showed switched off by the app after a missed run "
+        "- this chat, the Morning Brief, the Inbox, any of them; never one "
+        "the customer paused): make its `call` exactly, and only when that "
+        "call succeeded write each of its `receipts` through the write door "
+        "with the arguments it carries plus \"workspace_root\" -\n"
         + _m_line(pair, "run_writer",
                   '{"args": {<the receipt args>, "workspace_root": "<WS>"}, '
                   '"name": "' + REENABLE_WRITER + '"}') +
-        "    - and, again only when that call succeeded, this run's final "
-        "message is `reenable.line`, once, instead of `" + SILENT_CLOSE_LINE
-        + "`; a call that failed writes no receipt and says nothing about "
-        "it. `reenable` null (the chat "
-        "is on, the customer paused it, or none is stored) or "
-        "`check_listing` false -> never switch it on and say nothing about "
-        "it.\n")
+        "    - and, when every call succeeded, this run's final message is "
+        "the answer's `line`, once, instead of `" + SILENT_CLOSE_LINE
+        + "`; when only some succeeded, it is the `line` of the first entry "
+        "whose call did, once; a call that failed writes no receipt and says "
+        "nothing about it. `reenable` empty (every chat is on, the customer "
+        "paused the rest, or none is stored) or `check_listing` false -> "
+        "never switch anything on and say nothing about it.\n")
 
 
 def _checked_workspace_path(workspace_path) -> Optional[str]:
@@ -3620,6 +3709,8 @@ def _scheduled_catch_up_plan(workspace_root, canonical: str, *,
         "reason": "",
         # T2 FIRE1 MUST 4 (R-WALK-1): the fire's own chat, on every verdict.
         "own_chat": own_chat_state(workspace_root),
+        # CHATSON1 (#98): every roster chat, the same way; M1b reads this one.
+        "chats": chats_state(workspace_root),
     }
     staleness = maintenance_staleness(workspace_root, now=now)
     base["staleness"] = staleness
@@ -4095,6 +4186,8 @@ __all__ = [
     "reenabled_line",
     "own_chat_state",
     "needs_reenable",
+    "reenable_candidates",
+    "chats_state",
     "validate_maintenance_ran",
     "write_fire_start_marker",
 ]

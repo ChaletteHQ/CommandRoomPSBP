@@ -468,6 +468,8 @@ is empty this call is skipped:
 python3 "$RT/shared/scripts/workspace_access.py" append_jsonl --json '{"holder": "inbox", "rel": "_hq/data/events.jsonl", "rows": [<every row in pending_rows from the render answer above, in order>]}'
 ```
 
+**Load the widget tool before anything else** (`shared/CHAT_ACTION_WIDGET.md` § Finding the widget tool first): on the merged and half-merged seats it is deferred, and a listed deferred tool counts as present; ToolSearch loads it, its setup tool runs first, then the relay.
+
 Pass the returned `html` to `mcp__visualize__show_widget` as `widget_code`
 (EW2+T, F-15 — `shared/CHAT_ACTION_WIDGET.md` § Transport). Never hand-compose
 or post-process it.

@@ -381,6 +381,7 @@ from needs_review_queue import render_queue_page
 transport = render_queue_page("<WORKSPACE>", page=1)
 # transport["html"]              -> show_widget widget_code, byte-exact
 # transport["group_pagination"]  -> {page, total_pages, has_more, total_groups, …}
+# Load the widget tool first (shared/CHAT_ACTION_WIDGET.md § Finding the widget tool first): a listed deferred tool counts as present; ToolSearch select:mcp__visualize__show_widget,mcp__visualize__read_me, call read_me, then relay.
 ```
 
 `render_queue_page` builds the grouped view, packs WHOLE groups onto each page

@@ -1035,6 +1035,94 @@ def trigger_row_payload(after_kwargs: dict, *, trigger_id: Optional[str] = None,
                      "row": row, "merge": bool(after_kwargs.get("merge"))}}
 
 
+# ---------------------------------------------------------------------------
+# SCHEDFAST1 (ChaletteHQ/cr1#101) - ONE door write per created chat
+# ---------------------------------------------------------------------------
+#
+# A create's `after` list has two entries - the trigger row and the
+# `schedule_created` event - and on the merged seat each was its own door
+# call (a device round trip, sometimes a permission card). `record_registration`
+# lands both in one call: the row exactly as `record_trigger_row` writes it,
+# then the event through the same gate `append_jsonl` uses. The `after` list
+# itself is unchanged, so every reader of the plan still sees both entries;
+# `registration_payload` is what folds them into the one call.
+
+#: The event type the second `after` entry names.
+SCHEDULE_CREATED_EVENT = "schedule_created"
+
+#: The door form a registering SKILL renders ONCE per created chat.
+REGISTRATION_WRITER = "schedule_backend:record_registration"
+
+
+def record_registration(workspace_root, task_id: str, row: dict,
+                        event: Optional[dict] = None, *,
+                        merge: bool = False,
+                        source_skill: str = "enable-command-room-schedules") -> dict:
+    """The trigger row AND the `schedule_created` receipt, one door call.
+
+    The row lands first, through `record_trigger_row` unchanged (the folder
+    comes from this seat's forwarded `CR_DEVICE_WORKSPACE`, never an
+    argument). The event is then appended through the canonical gate with
+    the same shape the skill used to paste through `append_jsonl`:
+    `{type: schedule_created, source_skill, data: <event>}`, seq and ts
+    stamped by the writer. An `event` of None appends nothing (a cron change
+    carries a row and no receipt). Returns `{row, event, event_written}`;
+    a failed append never undoes the row - the registration happened, and
+    `event_written: False` is the honest answer (RELIABILITY.md)."""
+    written = record_trigger_row(workspace_root, task_id, row, merge=merge)
+    out = {"row": written, "event": None, "event_written": False}
+    if not isinstance(event, dict) or not event:
+        return out
+    data = dict(event)
+    data.setdefault("taskId", task_id)
+    source = str(source_skill or "").strip() or "enable-command-room-schedules"
+    record = {"type": SCHEDULE_CREATED_EVENT, "source_skill": source,
+              "data": data}
+    try:
+        import sys as _sys
+        _here = str(Path(__file__).resolve().parent)
+        if _here not in _sys.path:
+            _sys.path.insert(0, _here)
+        from event_gate import append_event
+
+        events_path = Path(workspace_root) / "_hq" / "data" / "events.jsonl"
+        events_path.parent.mkdir(parents=True, exist_ok=True)
+        stamped = append_event(events_path, record, holder=f"schedule:{source}")
+        out["event"] = stamped[0] if stamped else record
+        out["event_written"] = True
+    except Exception:  # noqa: BLE001 - the receipt never blocks the row
+        out["event"] = record
+    return out
+
+
+def registration_payload(after, *, trigger_id: Optional[str] = None,
+                         workspace_root: str = "<WS>",
+                         source_skill: str = "enable-command-room-schedules") -> dict:
+    """The ONE `plan run_writer --json` payload for a create plan's whole
+    `after` list: the `record_trigger_map` entry's row (via
+    `trigger_row_payload`, so no `folders` and the trigger id filled) and the
+    `event:schedule_created` entry's data with the same id filled, for
+    `record_registration`. An `after` with no event entry (a cron change)
+    yields `event: None`; one with no row entry raises, because a chat with
+    no stored row is one no later read can name."""
+    row_kwargs = None
+    event = None
+    for name, kwargs in list(after or []):
+        if name == "schedule_backend.record_trigger_map" and row_kwargs is None:
+            row_kwargs = dict(kwargs or {})
+        elif name == f"event:{SCHEDULE_CREATED_EVENT}" and event is None:
+            event = dict(kwargs or {})
+    if row_kwargs is None:
+        raise ValueError("after list carries no record_trigger_map entry")
+    row_payload = trigger_row_payload(row_kwargs, trigger_id=trigger_id,
+                                      workspace_root=workspace_root)
+    if event is not None and trigger_id is not None:
+        event["trigger_id"] = trigger_id
+    return {"name": REGISTRATION_WRITER,
+            "args": {**row_payload["args"], "event": event,
+                     "source_skill": source_skill}}
+
+
 def read_trigger_map(workspace_root) -> dict:
     """The stored `triggers` map, or `{}` when there is none."""
     path = Path(workspace_root) / "_hq" / "workspace_config.json"
@@ -2933,6 +3021,10 @@ __all__ = [
     "record_trigger_row",
     "trigger_row_payload",
     "TRIGGER_ROW_WRITER",
+    "record_registration",
+    "registration_payload",
+    "REGISTRATION_WRITER",
+    "SCHEDULE_CREATED_EVENT",
     "compose_registration_body",
     "plan_registration",
     "registration_summary_lines",

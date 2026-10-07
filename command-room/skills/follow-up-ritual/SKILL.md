@@ -276,6 +276,7 @@ The skill auto-detects the meeting — most recent Granola note, pasted transcri
                                   name_hint="follow-up-ritual")
    # Pass transport["html"] to mcp__visualize__show_widget as widget_code (persisted page bytes, verbatim) (EW2+T, F-15 —
    # shared/CHAT_ACTION_WIDGET.md § Transport). Never hand-compose or post-process the HTML.
+   # Load the widget tool first (shared/CHAT_ACTION_WIDGET.md § Finding the widget tool first): a listed deferred tool counts as present; ToolSearch select:mcp__visualize__show_widget,mcp__visualize__read_me, call read_me, then relay.
    ```
 
    After posting the widget, surface the .docx recap link separately at the bottom per `shared/CONTRACT.md` Rule 3: build it with `chat_output_renderer.doc_headline_link(label, brief_path.get_brief_artifact_url(absolute_docx_path))` — never hand-encode a `computer:///` URL. One-line summary above the link: "Drafted 3 follow-ups for Aria, Bowie, and Lyra. Logged 2 decisions. Added 4 new commitments to your tracker."

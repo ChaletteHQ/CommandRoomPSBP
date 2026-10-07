@@ -118,6 +118,8 @@ The default output is a **self-contained, branded premium HTML brief** (SPEC OUT
 - **Deep / account brief** ("research Acme Co before my call") → add `Who & what matters` (decision-makers, likely buyer highlighted), `Recent signals` (trigger events), and a narrative section.
 - The badges are NOT optional: emit exactly one source badge reflecting the strongest tier actually used — `Verified · Vibe Prospecting` (enrichment ran) > `Deep web · Tavily` (Tavily ran, no enrichment) > `Web sources only` (built-in web) — plus one confidence chip (`high` / `medium` / `low`). Never claim a tier whose tools were absent. The footer source-summary names the engines used honestly (e.g., "5 sources via Tavily + Vibe Prospecting enrichment").
 
+**Load the widget tool before anything else** (`shared/CHAT_ACTION_WIDGET.md` § Finding the widget tool first): on the merged and half-merged seats it is deferred, and a listed deferred tool counts as present; ToolSearch loads it, its setup tool runs first, then the relay.
+
 Then offer to fold the findings into the workspace as a confirm-choice surface (rendered via `render_chat_output_widget`, posted via `widget_transport.render_and_persist` → `show_widget` (`transport["html"]` as `widget_code`) per `shared/CHAT_ACTION_WIDGET.md` § Transport — never markdown numbered actions):
 
 - **Save the brief** → hand verified content to `intel-intake` (writes `intel_logged` + `_hq/intel/` artifact, cross-referenced to the resolved thread).

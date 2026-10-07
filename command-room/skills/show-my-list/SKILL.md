@@ -145,6 +145,8 @@ data_view = {
 python3 "$RT/shared/scripts/workspace_access.py" run_helper --json '{"args": {"data_view": <the data view built above>, "name_hint": "show-my-list", "wrapper": "fragment", "workspace_root": "<WS>"}, "name": "plate_helpers:render_list_page"}'
 ```
 
+**Load the widget tool before anything else** (`shared/CHAT_ACTION_WIDGET.md` § Finding the widget tool first): on the merged and half-merged seats it is deferred, and a listed deferred tool counts as present; ToolSearch loads it, its setup tool runs first, then the relay.
+
 The render runs where the data is — the same renderer and the same
 wrapper-contract validator `widget_transport.render_and_persist` runs — and the
 answer is `{html, page_rel, bytes_len, pending_rows}`. Land the persisted page

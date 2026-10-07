@@ -180,6 +180,8 @@ receipt living in a prose step after the widget post, where the STOP contract
 ends the turn. A non-manual re-run within 15 minutes never double-receipts
 (the RV-3 guard).
 
+**Load the widget tool before anything else** (`shared/CHAT_ACTION_WIDGET.md` § Finding the widget tool first): on the merged and half-merged seats it is deferred, and a listed deferred tool counts as present; ToolSearch loads it, its setup tool runs first, then the relay.
+
 The answer is the transport — the same three things the command line printed
 as `CR-PAGINATION: {...}`, the bytes between `CR-WIDGET-HTML-BEGIN` /
 `CR-WIDGET-HTML-END`, and `CR-RECEIPT: {...}`: `pagination` (position metadata
@@ -190,7 +192,7 @@ workspace-relative. A `{refused: "mount_stale", lines}` answer means the
 folder has not finished syncing: post `lines` as the whole turn and stop —
 nothing was rendered and nothing was written. **Relay `html` to
 `mcp__visualize__show_widget` as `widget_code`, byte-exact — ONLY on a run
-whose tool list has that tool.** `tools` is the run's own tool list (S-13,
+whose tool list has that tool after the load in `shared/CHAT_ACTION_WIDGET.md` § Finding the widget tool first (a listed deferred tool counts as present: it is loaded, never read as absent).** `tools` is the run's own tool list (S-13,
 night 2): when `show_widget` is ABSENT (the merged app's scheduled shape) the
 answer carries `text_fallback: true`, `widget_posted: false`, the grouped-list
 `text` (the confirm queue with row numbers, then the change feed, then this

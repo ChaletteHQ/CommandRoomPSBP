@@ -219,6 +219,7 @@ transport = render_and_persist(data_view=data_view, wrapper="fragment",
                                name_hint="intro-broker")
 # Pass transport["html"] to mcp__visualize__show_widget as widget_code (persisted page bytes, verbatim) (EW2+T, F-15 —
 # shared/CHAT_ACTION_WIDGET.md § Transport). Never hand-compose or post-process the HTML.
+# Load the widget tool first (shared/CHAT_ACTION_WIDGET.md § Finding the widget tool first): a listed deferred tool counts as present; ToolSearch select:mcp__visualize__show_widget,mcp__visualize__read_me, call read_me, then relay.
 ```
 
 Per `EMAIL_DRAFT_PROTOCOL.md` §1, the user clicking `N send` triggers Gmail-send via the canonical dispatch order (Zapier-threaded → native threaded → standalone fallback). The double-opt-in companion note (Draft 1) ships separately on confirmation of A's yes; that second-stage workflow stays as documented in this skill — it's just the FIRST stage (which draft to send to A) that's now widget-driven instead of plain-text-driven.

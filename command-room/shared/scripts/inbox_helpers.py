@@ -919,6 +919,21 @@ def render_inbox_page(workspace_root: str, data_view: Dict[str, Any], *,
 
 #: The widget tool, and the two delivery tools the device shape carries.
 WIDGET_TOOL = "mcp__visualize__show_widget"
+
+
+def widget_tool_name(tools) -> Optional[str]:
+    """The widget tool in this run's tool list, by the name the host lists it
+    under, or None (WIDGETLOAD1, cr1#100). The literal name first; else any
+    id whose last segment is `show_widget` - on the merged seat the host can
+    list the same tool under a server-id prefix, and a listed deferred tool
+    counts as present. A run with no such name at all is the text shape."""
+    names = _tool_names(tools)
+    if WIDGET_TOOL in names:
+        return WIDGET_TOOL
+    for n in sorted(names):
+        if n == "show_widget" or n.endswith("__show_widget"):
+            return n
+    return None
 SEND_MESSAGE_TOOL = "SendUserMessage"
 SEND_FILE_TOOL = "SendUserFile"
 ARTIFACT_TOOL = "Artifact"
@@ -1163,7 +1178,8 @@ def plan_delivery(workspace_root: str, *, tools, page_rel: str, text: str = "",
     counts = dict(counts or {})
     urgent, week = int(counts.get("urgent") or 0), int(counts.get("this_week") or 0)
     out: Dict[str, Any] = {"calls": [], "rows": [], "lines": []}
-    if WIDGET_TOOL in names:
+    widget_tool = widget_tool_name(tools)
+    if widget_tool:
         out.update({
             "branch": "widget",
             "push": push_line("delivered", urgent=urgent, this_week=week),
@@ -1171,7 +1187,7 @@ def plan_delivery(workspace_root: str, *, tools, page_rel: str, text: str = "",
                               "text_fallback": False, "n_accounts": int(n_accounts),
                               "push_planned": True},
         })
-        out["calls"].append({"tool": WIDGET_TOOL})
+        out["calls"].append({"tool": widget_tool})
         return out
     closing = widget_absent_line(page_rel, device_root)
     body_lines = [text.rstrip("\n"), "", closing] if text else [closing]

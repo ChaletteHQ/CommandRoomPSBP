@@ -1139,6 +1139,7 @@ transport = render_and_persist(data_view=data_view, wrapper="fragment",
                                name_hint="meeting-notes")
 # Pass transport["html"] to mcp__visualize__show_widget as widget_code (persisted page bytes, verbatim) (EW2+T, F-15 —
 # shared/CHAT_ACTION_WIDGET.md § Transport). Never hand-compose or post-process the HTML.
+# Load the widget tool first (shared/CHAT_ACTION_WIDGET.md § Finding the widget tool first): a listed deferred tool counts as present; ToolSearch select:mcp__visualize__show_widget,mcp__visualize__read_me, call read_me, then relay.
 ```
 
 **Step 9c-bis — DOOR 1: the meeting card's questions (ATTRIB1-B D8, 2026-09-04).** After the card, render the questions this call left open — at most 3, lowest confidence first, each a pick-list of the meeting's other parties with the likely answer first and tagged. This is the FIRST door for a counterparty the ladder could not resolve; the needs-your-call queue is no longer where the user first meets it. Rendered ONLY through the transport (every gate runs inside it); nothing when the meeting asks nothing:

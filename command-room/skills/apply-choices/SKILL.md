@@ -844,6 +844,8 @@ NOT allowed: `keep as draft` (use `draft`), `send as is` (use `send`), `regenera
 
 **Step 4A.3 — render and post:**
 
+**Load the widget tool before anything else** (`shared/CHAT_ACTION_WIDGET.md` § Finding the widget tool first): on the merged and half-merged seats it is deferred, and a listed deferred tool counts as present; ToolSearch loads it, its setup tool runs first, then the relay.
+
 Render + persist via the widget_code transport (EW2+T, F-15): `widget_transport.render_and_persist(data_view=post_apply_data_view, wrapper="fragment", persist_dir=<WORKSPACE>/_hq/.system/widgets, name_hint="apply-choices")`, then pass `transport["html"]` (the persisted page's validated bytes, verbatim) to `mcp__visualize__show_widget` as `widget_code`. Never hand-compose or post-process the HTML. The widget IS the post — do NOT compose a markdown summary of what's in the widget. Same posting contract as the source orchestrators (`shared/CHAT_ACTION_WIDGET.md` § Transport).
 
 **Step 4A.4 — Post the chat-links section:**

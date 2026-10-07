@@ -360,7 +360,7 @@ Specifically:
 - The orchestrator's Phase 1, Phase 2, etc. are the steps you must execute.
 - Any `mcp__visualize__show_widget`, any rendered access-layer command, the harness's file card when it offers one, or other tool calls specified by the orchestrator MUST be made (you are running them, not summarizing them).
 - The orchestrator's STOP CONTRACT applies after the widget posts. After the widget + Briefs/Sources sections, you stop.
-- When this run's tool list has NO widget tool, the orchestrator's text fallback IS the surface (`inbox_helpers.plan_delivery`: the list, the saved page, the counts-only push) — never a stop message, never a sentence about the missing tool.
+- When this run's tool list has NO widget tool after the load in `shared/CHAT_ACTION_WIDGET.md` § Finding the widget tool first (a listed deferred tool counts as present: it is loaded, never read as absent), the orchestrator's text fallback IS the surface (`inbox_helpers.plan_delivery`: the list, the saved page, the counts-only push) — never a stop message, never a sentence about the missing tool.
 
 Do NOT write a summary of what the orchestrator says. EXECUTE the instructions verbatim.
 

@@ -326,6 +326,7 @@ RUN_HELPER_ALLOWLIST = frozenset({
     "schedule_backend:plan_registration",  # BRIDGE2 - registration planned beside the data: the seat digest vs the declaration (R-WALK-3)
     "schedule_config:scheduled_writer",  # BRIDGE2 - the declaration read where the folder is, so a refusal can name the computer
     "migration_adjudication:adjudication_status",  # BRIDGE2 - the bridge's Phase 1 adjudication gate, read beside the data (R-WALK-5)
+    "maintenance_dispatcher:chats_state",  # CHATSON1 (#98) - M1b asks with the scheduler's rows for EVERY chat on the roster; switch-on only for the ones that read off
     "maintenance_dispatcher:own_chat_state",  # FIRE3B - M1b asks with the scheduler's rows; switch-on only when this chat reads off (F-T2-13)
     "eod_helpers:resolve_choice",  # MIGRATE3-EOD - the evening answer resolver, read beside the data (F-T2-15)
     "friday_wrap_helpers:lateness",  # MIGRATE3-FW - the wrap's Phase 2.9 verdict, its rows held
@@ -414,6 +415,7 @@ RUN_WRITER_ALLOWLIST = frozenset({
     # page and writes the fire's one receipt (FB-7).
     "staff_meeting_helpers:run_staff_meeting_surface",
     "schedule_backend:record_trigger_row",  # SCHEDREG1 - registration's trigger row, landed where the folder is
+    "schedule_backend:record_registration",  # SCHEDFAST1 (#101) - the trigger row AND the schedule_created receipt, one door call per created chat
     "schedule_config:write_schedule_skipped",  # SCHEDREG1 - the one refusal row a seat that cannot register writes
     "inbox_helpers:run_inbox_surface",  # INBOXDRIVE1
     "maintenance_dispatcher:mark_fire_start",  # MAINTJOBS1
